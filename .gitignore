@@ -1,0 +1,9 @@
+*.egg-info
+.vscode/
+.ipynb_checkpoints/
+*.csv
+*.txt
+*.jsonl
+kaggle-environments/
+__pycache__/
+*.pyc
