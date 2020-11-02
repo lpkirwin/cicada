@@ -12,7 +12,7 @@ from cicada.agent import Agent
 from cicada.utils import visualisation as viz
 
 INIT_NEW_FILES = False
-N_GAMES_TO_SIMULATE = 10
+N_GAMES_TO_SIMULATE = 100
 N_PROCESSES = 5
 
 FILEPATH = os.path.dirname(os.path.abspath(__file__))

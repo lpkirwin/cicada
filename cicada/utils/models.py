@@ -1,16 +1,19 @@
 import os
 import lightgbm as lgb
-import pandas as pd
-# import numpy as np
+
+# import pandas as pd
+import numpy as np
 
 FILEPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHORT_PASS_MODEL_PATH = os.path.join(FILEPATH, "short_pass_model.txt")
 LONG_PASS_MODEL_PATH = os.path.join(FILEPATH, "long_pass_model.txt")
 HANDLE_MODEL_PATH = os.path.join(FILEPATH, "handle_model.txt")
+POSITION_MODEL_PATH = os.path.join(FILEPATH, "position_model.txt")
 
 short_pass_model = lgb.Booster(model_file=SHORT_PASS_MODEL_PATH)
 long_pass_model = lgb.Booster(model_file=LONG_PASS_MODEL_PATH)
 handle_model = lgb.Booster(model_file=HANDLE_MODEL_PATH)
+position_model = lgb.Booster(model_file=POSITION_MODEL_PATH)
 
 
 def short_pass_success(
@@ -21,14 +24,18 @@ def short_pass_success(
     small_cone_angle,
     pass_distance,
 ):
-    return short_pass_model.predict([[
-        pass_error_diff,
-        pos_score_posx,
-        pos_score_dnet,
-        pos_score_dopp,
-        small_cone_angle,
-        pass_distance,
-    ]])[0]
+    return short_pass_model.predict(
+        [
+            [
+                pass_error_diff,
+                pos_score_posx,
+                pos_score_dnet,
+                pos_score_dopp,
+                small_cone_angle,
+                pass_distance,
+            ]
+        ]
+    )[0]
     # return max(
     #     min(
     #         1.9341
@@ -52,15 +59,19 @@ def long_pass_success(
     forward_cone_angle,
     pass_distance,
 ):
-    return long_pass_model.predict([[
-        pass_error_diff,
-        pos_score_posx,
-        pos_score_dnet,
-        pos_score_dopp,
-        small_cone_angle,
-        forward_cone_angle,
-        pass_distance,
-    ]])[0]
+    return long_pass_model.predict(
+        [
+            [
+                pass_error_diff,
+                pos_score_posx,
+                pos_score_dnet,
+                pos_score_dopp,
+                small_cone_angle,
+                forward_cone_angle,
+                pass_distance,
+            ]
+        ]
+    )[0]
     # return max(
     #     min(
     #         1.3669
@@ -85,15 +96,19 @@ def handle_failure(
     small_cone_angle,
     angle_diff,
 ):
-    return handle_model.predict([[
-        pos_score_posx,
-        pos_score_dnet,
-        pos_score_view,
-        pos_score_dopp,
-        close_opp_dir_change,
-        small_cone_angle,
-        angle_diff,
-    ]])[0]
+    return handle_model.predict(
+        [
+            [
+                pos_score_posx,
+                pos_score_dnet,
+                pos_score_view,
+                pos_score_dopp,
+                close_opp_dir_change,
+                small_cone_angle,
+                angle_diff,
+            ]
+        ]
+    )[0]
     # return max(
     #     min(
     #         0.1428
@@ -108,3 +123,33 @@ def handle_failure(
     #     ),
     #     0,
     # )
+
+
+def position_score(
+    posx,
+    dnet,
+    view,
+    dopp,
+):
+    # return position_model.predict([[
+    #     1.0,  # accidentally had constant in X
+    #     posx,
+    #     dnet,
+    #     view,
+    #     dopp,
+    # ]])[0]
+    return max(
+        min(
+            156.3886
+            + -41.2535 * posx
+            + -108.8586 * dnet
+            + 13.1269 * view
+            + 57.4461 * dopp
+            + -136.3729 * np.log10(posx + 2.0)
+            + 7.2408 * dnet ** 2
+            + -5.0052 * view ** 2
+            + -360.2737 * dopp ** 2,
+            50.0,
+        ),
+        0,
+    )

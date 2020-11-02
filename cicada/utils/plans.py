@@ -62,13 +62,21 @@ class Plan:
         self.dopp_val = calc.get_min_opp_distance(self.state, self.pos, self.timestep)
         self.dopp_score = self.dopp_val * 10
 
-        self.total_score = (
-            self.base_score
-            + self.posx_score
-            + self.dnet_score
-            + self.view_score
-            + self.dopp_score
+        # self.total_score = (
+        #     self.base_score
+        #     + self.posx_score
+        #     + self.dnet_score
+        #     + self.view_score
+        #     + self.dopp_score
+        # )
+
+        pos_score = models.position_score(
+            posx=self.posx_val,
+            dnet=self.dnet_val,
+            view=self.view_val,
+            dopp=self.dopp_val,
         )
+        self.total_score = pos_score
 
         self.pos_score_data = {
             "base": {"val": "nan", "score": self.base_score},

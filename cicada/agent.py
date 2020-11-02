@@ -56,7 +56,7 @@ class Agent:
             extra_timestep = state.will_receive_ball_at
 
             potential_plans.append(plans.Breakaway())
-            potential_plans.append(plans.HighPass())
+            # potential_plans.append(plans.HighPass())
             potential_plans.append(
                 plans.Shoot(timestep=config.SHOOT_TIMESTEP + extra_timestep)
             )

@@ -2,7 +2,6 @@
 .vscode/
 .ipynb_checkpoints/
 *.csv
-*.txt
 *.jsonl
 kaggle-environments/
 __pycache__/
