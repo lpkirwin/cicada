@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 import json
 import numpy as np
@@ -11,8 +12,14 @@ from kaggle_environments.envs.football.helpers import (
 
 from . import navigation as nav
 from . import config
+
 # from . import plans
 from . import calculation as calc
+
+
+FILEPATH = os.path.dirname(os.path.abspath(__file__))
+LOG_PATH = os.path.join(FILEPATH, "log.jsonl")
+SCORE_PATH = os.path.join(FILEPATH, "score.csv")
 
 
 def clean_observation(obs):
@@ -362,3 +369,44 @@ class NumpyEncoder(json.JSONEncoder):
             return None
 
         return json.JSONEncoder.default(self, obj)
+
+
+def init_log_file():
+    with open(LOG_PATH, "w") as file:
+        file.write("")
+
+
+def add_to_log_file(obj):
+
+    try:
+        json_string = json.dumps(obj, cls=NumpyEncoder)
+    except TypeError as e:
+        print("Failed to serialize:", obj)
+        raise e
+
+    with open(LOG_PATH, "a") as file:
+        file.write(json_string + "\n")
+
+
+def get_log_file():
+    return open(LOG_PATH, "r")
+
+
+def init_score_file():
+    with open(SCORE_PATH, "w") as file:
+        file.write("left_score,right_score,win,tie\n")
+
+
+def add_to_score_file(score):
+    with open(SCORE_PATH, "a") as file:
+        win = 1 if score[0] > score[1] else 0
+        tie = 1 if score[0] == score[1] else 0
+        file.write(f"{score[0]},{score[1]},{win},{tie}\n")
+
+
+def get_score_file_as_df():
+    return pd.read_csv(SCORE_PATH)
+
+
+def get_n_games():
+    return len(get_score_file_as_df())

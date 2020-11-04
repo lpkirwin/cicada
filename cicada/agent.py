@@ -1,5 +1,4 @@
 import time
-import importlib
 from copy import deepcopy
 
 import numpy as np
@@ -9,8 +8,6 @@ from cicada.utils import data
 from cicada.utils import plans
 from cicada.utils import config
 from cicada.utils import navigation as nav
-
-importlib.reload(plans)  # models may have changed
 
 
 class Agent:

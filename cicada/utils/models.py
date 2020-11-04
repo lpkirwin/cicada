@@ -10,8 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 from sklearn.model_selection import GridSearchCV
 
-from . import data
-from cicada import training
+from cicada.utils import data
 
 FILEPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -42,8 +41,8 @@ def make_dataset(inner_function, filename, incremental=True):
     dfs = list()
     game_id = existing_length
 
-    with training.get_log_file() as file:
-        for i, log in tqdm(enumerate(file), total=training.get_n_games()):
+    with data.get_log_file() as file:
+        for i, log in tqdm(enumerate(file), total=data.get_n_games()):
 
             if i < existing_length:
                 continue
@@ -202,16 +201,16 @@ lgb_model_specs = {
     "short_pass_success": {
         "filename": "short_pass_model.txt",
         "dataset": make_short_pass_dataset,
-        "features": [
-            "pass_error_diff",
-            "pos_score_posx",
-            "pos_score_dnet",
-            "pos_score_dopp",
-            "small_cone_angle",
-            "pass_distance",
-            "opp_dist_to_line",
-            "opp_dist_to_active",
-        ],
+        "features": {
+            "pass_error_diff": "eval_data.pass_error_diff",
+            "pos_score_posx": "pos_score_data.posx",
+            "pos_score_dnet": "pos_score_data.dnet",
+            "pos_score_dopp": "pos_score_data.dopp",
+            "small_cone_angle": "eval_data.small_cone_angle",
+            "pass_distance": "eval_data.pass_distance",
+            "opp_dist_to_line": "eval_data.opp_dist_to_line",
+            "opp_dist_to_active": "eval_data.opp_dist_to_active",
+        },
         "class": lgb.LGBMClassifier,
         "grid": {
             "n_estimators": list(range(10, 201, 20)),
@@ -222,17 +221,17 @@ lgb_model_specs = {
     "long_pass_success": {
         "filename": "long_pass_model.txt",
         "dataset": make_long_pass_dataset,
-        "features": [
-            "pass_error_diff",
-            "pos_score_posx",
-            "pos_score_dnet",
-            "pos_score_dopp",
-            "small_cone_angle",
-            "forward_cone_angle",
-            "pass_distance",
-            "opp_dist_to_line",
-            "opp_dist_to_active",
-        ],
+        "features": {
+            "pass_error_diff": "eval_data.pass_error_diff",
+            "pos_score_posx": "pos_score_data.posx",
+            "pos_score_dnet": "pos_score_data.dnet",
+            "pos_score_dopp": "pos_score_data.dopp",
+            "small_cone_angle": "eval_data.small_cone_angle",
+            "forward_cone_angle": "eval_data.forward_cone_angle",
+            "pass_distance": "eval_data.pass_distance",
+            "opp_dist_to_line": "eval_data.opp_dist_to_line",
+            "opp_dist_to_active": "eval_data.opp_dist_to_active",
+        },
         "class": lgb.LGBMClassifier,
         "grid": {
             "n_estimators": list(range(10, 201, 20)),
@@ -243,15 +242,15 @@ lgb_model_specs = {
     "handle_success": {
         "filename": "handle_model.txt",
         "dataset": make_handle_dataset,
-        "features": [
-            "pos_score_posx",
-            "pos_score_dnet",
-            "pos_score_view",
-            "pos_score_dopp",
-            "close_opp_dir_change",
-            "small_cone_angle",
-            "angle_diff",
-        ],
+        "features": {
+            "pos_score_posx": "pos_score_data.posx",
+            "pos_score_dnet": "pos_score_data.dnet",
+            "pos_score_view": "pos_score_data.view",
+            "pos_score_dopp": "pos_score_data.dopp",
+            "close_opp_dir_change": "eval_data.close_opp_dir_change",
+            "small_cone_angle": "eval_data.small_cone_angle",
+            "angle_diff": "eval_data.angle_diff",
+        },
         "class": lgb.LGBMClassifier,
         "grid": {
             "n_estimators": list(range(10, 201, 20)),
@@ -266,6 +265,7 @@ def fit_lgb_model(model_spec):
     ms = model_spec
     print("loading data using", ms["filename"])
     df = ms["dataset"]()
+    print(df.describe().T)
     grid_search = GridSearchCV(
         estimator=ms["class"](),
         param_grid=ms["grid"],
@@ -273,13 +273,14 @@ def fit_lgb_model(model_spec):
         verbose=1,
         n_jobs=5,
     )
-    X = df[ms["features"]]
+    X = df[ms["features"].values()]
     y = df["target"]
     print("fitting", ms["filename"])
     grid_search.fit(X, y)
     print("best params:", grid_search.best_params_)
     pred = grid_search.predict_proba(X)[:, 1]
-    print("distribution of predictions:", pd.Series(pred).describe())
+    print("distribution of predictions:")
+    print(pd.Series(pred).describe())
     filepath = os.path.join(FILEPATH, ms["filename"])
     print("saving to", filepath)
     grid_search.best_estimator_.booster_.save_model(filepath)
@@ -290,24 +291,49 @@ class PlaceholderModel:
         return [0.5]
 
 
-def load_lgb_models():
+def hash_of_text_file(filepath):
+    try:
+        with open(filepath, "r") as file:
+            return hash(file.read())
+    except FileNotFoundError:
+        return 0
+
+
+def load_lgb_models(quiet=True):
 
     global lgb_models
+    global lgb_model_hashes
     lgb_models = dict()
+    lgb_model_hashes = dict()
 
     for name, spec in lgb_model_specs.items():
 
-        try:
-            model = lgb.Booster(model_file=os.path.join(FILEPATH, spec["filename"]))
-            print("model loaded from", spec["filename"])
-        except lgb.basic.LightGBMError:
-            print("failed to load model from", spec["filename"], "using placeholder")
+        filepath = os.path.join(FILEPATH, spec["filename"])
+        if os.path.isfile(filepath):
+            model = lgb.Booster(model_file=filepath)
+            if not quiet:
+                print("model loaded from", filepath)
+            model_hash = hash_of_text_file(filepath)
+        else:
+            if not quiet:
+                print("model not found, using placeholder instead:", name)
             model = PlaceholderModel()
+            model_hash = 0
 
         lgb_models[name] = model
+        lgb_model_hashes[name] = model_hash
 
 
-load_lgb_models()
+def reload_lgb_models_if_needed(quiet=True):
+    if "lgb_models" not in globals():
+        return load_lgb_models(quiet=quiet)
+    for name, spec in lgb_model_specs.items():
+        filepath = os.path.join(FILEPATH, spec["filename"])
+        if lgb_model_hashes[name] != hash_of_text_file(filepath):
+            return load_lgb_models(quiet=quiet)
+
+
+reload_lgb_models_if_needed()
 
 
 def short_pass_success(
@@ -419,3 +445,19 @@ def position_score(
         ),
         0,
     )
+
+
+if __name__ == "__main__":
+
+    # tests:
+
+    short_pass_features = lgb_model_specs["short_pass_success"]["features"].keys()
+    short_pass_success(**{k: 1.0 for k in short_pass_features})
+
+    long_pass_features = lgb_model_specs["long_pass_success"]["features"].keys()
+    long_pass_success(**{k: 1.0 for k in long_pass_features})
+
+    handle_features = lgb_model_specs["handle_success"]["features"].keys()
+    handle_success(**{k: 1.0 for k in handle_features})
+
+    print("tests passed")

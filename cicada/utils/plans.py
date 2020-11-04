@@ -1,4 +1,3 @@
-import importlib
 import numpy as np
 from kaggle_environments.envs.football.helpers import Action, GameMode
 
@@ -6,8 +5,6 @@ from . import models
 from . import config
 from . import navigation as nav
 from . import calculation as calc
-
-importlib.reload(models)  # models may have changed
 
 # this is later set in the agent - I did this for convenience so that
 # I wouldn't have to explicitly pass the state around all the time
