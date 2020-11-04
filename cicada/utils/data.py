@@ -1,4 +1,7 @@
+from copy import deepcopy
+import json
 import numpy as np
+import pandas as pd
 from kaggle_environments.envs.football.helpers import (
     Action,
     GameMode,
@@ -8,7 +11,7 @@ from kaggle_environments.envs.football.helpers import (
 
 from . import navigation as nav
 from . import config
-from . import plans
+# from . import plans
 from . import calculation as calc
 
 
@@ -286,3 +289,76 @@ class State:
             }
         )
         self.log.append(list())
+
+
+def filter_log_step(log_step, **kwargs):
+    """Returns filtered log step (creates a copy)"""
+    out = list()
+    for rec in log_step:
+        for k, values in kwargs.items():
+            if not isinstance(values, (list, tuple)):
+                values = [values]
+            for v in values:
+                if rec[k] == v:
+                    out.append(deepcopy(rec))
+    return out
+
+
+def filter_log(log, **kwargs):
+    """Filters each step in a log (creates a copy, drops empty steps)"""
+    # import pdb; pdb.set_trace()
+    out = list()
+    for log_step in log:
+        filtered_step = filter_log_step(log_step, **kwargs)
+        if len(filtered_step):
+            out.append(filtered_step)
+    return out
+
+
+def parse_log_to_df(log, **kwargs):
+    rows = list()
+    for step in log:
+        rows.extend(step)
+    return pd.json_normalize(rows)
+
+
+# https://stackoverflow.com/questions/50916422/python-typeerror-object-of-type-int64-is-not-json-serializable/50916741
+class NumpyEncoder(json.JSONEncoder):
+    """ Custom encoder for numpy data types """
+
+    def default(self, obj):
+        if isinstance(
+            obj,
+            (
+                np.int_,
+                np.intc,
+                np.intp,
+                np.int8,
+                np.int16,
+                np.int32,
+                np.int64,
+                np.uint8,
+                np.uint16,
+                np.uint32,
+                np.uint64,
+            ),
+        ):
+
+            return int(obj)
+
+        elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+            return float(obj)
+
+        elif isinstance(obj, (np.complex_, np.complex64, np.complex128)):
+            return {"real": obj.real, "imag": obj.imag}
+
+        elif isinstance(obj, (np.ndarray,)):
+            return obj.tolist()
+
+        elif isinstance(obj, (np.bool_)):
+            return bool(obj)
+
+        elif isinstance(obj, (np.void)):
+            return None
+
+        return json.JSONEncoder.default(self, obj)

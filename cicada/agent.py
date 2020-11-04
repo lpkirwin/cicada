@@ -1,16 +1,22 @@
 import time
+import importlib
 from copy import deepcopy
 
 import numpy as np
 from kaggle_environments.envs.football.helpers import Action
 
-from cicada.utils import data, plans, config
+from cicada.utils import data
+from cicada.utils import plans
+from cicada.utils import config
 from cicada.utils import navigation as nav
+
+importlib.reload(plans)  # models may have changed
 
 
 class Agent:
-    def __init__(self):
+    def __init__(self, noise_sd=0.0):
         self.state = None
+        self.noise_sd = noise_sd
 
     def action_wrapper(self, obs):
 
@@ -30,9 +36,6 @@ class Agent:
             plans.state = self.state  # set at module level
         else:
             self.state.start_of_turn_update(obs)
-
-        # if self.plan is not None:
-        #     self.plan.start_of_turn_update()
 
         state = self.state  # to save myself writing `self` all the time
 
@@ -108,9 +111,16 @@ class Agent:
                 for plan in potential_plans:
                     if isinstance(plan, state.follow_through_plan):
                         plan.follow_through = True
+                        plan.timestep = max(0, plan.timestep - time_since_kick)
+                        plan.evaluate()  # reevaluate with new timestep
                         plan.value += 100
                         plan.name += "_FT"
-                        plan.timestep = max(0, 5 - time_since_kick)
+
+        # randomise values
+        if self.noise_sd > 0:
+            for plan in potential_plans:
+                if plan.randomisable:
+                    plan.value += np.random.normal(loc=0.0, scale=self.noise_sd)
 
         # pick the best plan
         potential_plans = sorted(potential_plans, key=lambda x: -x.value)
@@ -121,7 +131,7 @@ class Agent:
         if action is None:
             raise ValueError(f"Plan {plan} returned 'None' as action :(")
 
-        # if we've kicked the ball, make sure we follow through appropriately
+        # if we've kicked the ball, activate follow-through
         if action in [Action.ShortPass, Action.LongPass, Action.HighPass, Action.Shot]:
             state.player_kicked = state.active_idx
             state.player_kicked_countdown_timer = 10

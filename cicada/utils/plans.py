@@ -1,3 +1,4 @@
+import importlib
 import numpy as np
 from kaggle_environments.envs.football.helpers import Action, GameMode
 
@@ -6,12 +7,16 @@ from . import config
 from . import navigation as nav
 from . import calculation as calc
 
+importlib.reload(models)  # models may have changed
+
 # this is later set in the agent - I did this for convenience so that
 # I wouldn't have to explicitly pass the state around all the time
 state = None
 
 
 class Plan:
+    randomisable = False
+
     def __init__(self, timestep=0):
         self.state = state
         self.timestep = timestep
@@ -32,62 +37,35 @@ class Plan:
         self.dist = nav.dist_1d(self.state.active_pos, self.pos)
         self.position_score()
 
-    # def start_of_turn_update(self):
-    #     self.age += 1
-    #     self.update_data()
-    #     try:
-    #         self.evaluate()
-    #     except Exception as e:
-    #         print(self.name)
-    #         print(self.pos)
-    #         print(self.state.active_pos)
-    #         raise e
-
     def end_of_turn_update(self):
         self.state.write_to_log(self.get_record())
 
     def position_score(self):
 
-        self.base_score = 15
-
-        self.posx_val = self.pos[0]
-        self.posx_score = np.log10(min(self.posx_val, 0.5) + 2.0) * 18
-
-        self.dnet_val = calc.get_distance_to_net(self.pos)
-        self.dnet_score = self.dnet_val * -3
-
-        self.view_val = calc.get_view_of_net(self.state, self.pos, self.timestep)
-        self.view_score = self.view_val * 22
-
-        self.dopp_val = calc.get_min_opp_distance(self.state, self.pos, self.timestep)
-        self.dopp_score = self.dopp_val * 10
-
-        # self.total_score = (
-        #     self.base_score
-        #     + self.posx_score
-        #     + self.dnet_score
-        #     + self.view_score
-        #     + self.dopp_score
-        # )
+        posx = self.pos[0]
+        posy = self.pos[1]
+        dnet = calc.get_distance_to_net(self.pos)
+        view = calc.get_view_of_net(self.state, self.pos, self.timestep)
+        dopp = calc.get_min_opp_distance(self.state, self.pos, self.timestep)
 
         pos_score = models.position_score(
-            posx=self.posx_val,
-            dnet=self.dnet_val,
-            view=self.view_val,
-            dopp=self.dopp_val,
+            posx=posx,
+            posy=posy,
+            dnet=dnet,
+            view=view,
+            dopp=dopp,
         )
-        self.total_score = pos_score
 
         self.pos_score_data = {
-            "base": {"val": "nan", "score": self.base_score},
-            "posx": {"val": self.posx_val, "score": self.posx_score},
-            "dnet": {"val": self.dnet_val, "score": self.dnet_score},
-            "view": {"val": self.view_val, "score": self.view_score},
-            "dopp": {"val": self.dopp_val, "score": self.dopp_score},
-            "total": {"val": "nan", "score": self.total_score},
+            "posx": posx,
+            "posy": posy,
+            "dnet": dnet,
+            "view": view,
+            "dopp": dopp,
+            "score": pos_score,
         }
 
-        return self.total_score
+        return pos_score
 
     def evaluate(self):
         raise NotImplementedError()
@@ -105,7 +83,7 @@ class Plan:
             "pos": self.pos.round(4),
             "dist": round(self.dist, 4),
             "value": self.value,
-            "pos_score": self.pos_score_data,
+            "pos_score_data": self.pos_score_data,
             "action_direction": getattr(self, "action_direction", None),
             "pass_error": getattr(self, "error", -999.0),
             "pass_error_diff": getattr(self, "error_diff", -999.0),
@@ -140,7 +118,7 @@ class Move(Plan):
         angle_diff = nav.angle_diff(desired_angle, current_angle)
 
         if self.state.active_vel > 0.005:  # if we're going fast...
-            if angle_diff > 50:  # ...in the wrong direction
+            if angle_diff > 50 and angle_diff < 120:  # ...in a semi-wrong direction
                 if self.state.is_sprinting:
                     return Action.ReleaseSprint
             else:
@@ -155,6 +133,7 @@ class Move(Plan):
 
 class MoveWithBall(Plan):
     name = "MOVE_WITH_BALL"
+    randomisable = True
 
     def __init__(self, action_direction, timestep):
         self.action_direction = action_direction
@@ -171,7 +150,6 @@ class MoveWithBall(Plan):
         close_opp_dir_change = 0.0
         if calc.get_min_opp_distance(self.state, self.state.active_pos) < 0.08:
             close_opp_dir_change = nav.dist_1d(current_dir, desired_dir)
-            # self.value -= close_opp_dir_change * 50
 
         # plan is less attractive if there's someone in our way
         small_cone_angle = nav.min_opp_angle(
@@ -181,25 +159,22 @@ class MoveWithBall(Plan):
             ref_dist=0.1,
             ref_offset=-0.02,
         )
-        # if small_cone_angle < 10:
-        #     self.value *= 0.5
 
         # some inertia:
         angle_diff = nav.angle_diff(nav.angle(current_dir), nav.angle(desired_dir))
         if angle_diff <= 50:
             self.name += "*"
-            # self.value += 0.2
 
-        prb_failure = models.handle_failure(
-            pos_score_posx=self.pos_score_data["posx"]["val"],
-            pos_score_dnet=self.pos_score_data["dnet"]["val"],
-            pos_score_view=self.pos_score_data["view"]["val"],
-            pos_score_dopp=self.pos_score_data["dopp"]["val"],
+        prb_success = models.handle_success(
+            pos_score_posx=self.pos_score_data["posx"],
+            pos_score_dnet=self.pos_score_data["dnet"],
+            pos_score_view=self.pos_score_data["view"],
+            pos_score_dopp=self.pos_score_data["dopp"],
             close_opp_dir_change=close_opp_dir_change,
             small_cone_angle=small_cone_angle,
             angle_diff=angle_diff,
         )
-        self.value *= 1 - prb_failure
+        self.value *= prb_success ** config.RISK_AVERSION
 
         # plan is super unattractive if we'd move outside the pitch
         outside_pitch = nav.outside_pitch(self.pos)
@@ -211,7 +186,7 @@ class MoveWithBall(Plan):
             "small_cone_angle": small_cone_angle,
             "outside_pitch": outside_pitch,
             "angle_diff": angle_diff,
-            "prb_failure": prb_failure,
+            "prb_success": prb_success,
         }
 
     def get_position(self):
@@ -242,6 +217,7 @@ class MoveWithBall(Plan):
 
 class ShortPass(Plan):
     name = "SHORT_PASS"
+    randomisable = True
 
     def __init__(
         self,
@@ -253,19 +229,14 @@ class ShortPass(Plan):
     ):
         self.player = player
         self.action_direction = action_direction
-        self.error = error
-        self.error_diff = error_diff
+        self.pass_error = error
+        self.pass_error_diff = error_diff
         self.follow_through = False
         super().__init__(timestep=timestep)
 
     def evaluate(self):
 
-        # start with position value with a slight penalty
-        self.value = self.position_score()  # - 1.5
-
-        # being clear of opponents is a bit more valuable for passing
-        # min_opp_distance = calc.get_min_opp_distance(self.state, self.pos, self.timestep)
-        # self.value += min_opp_distance * 3
+        self.value = self.position_score()
 
         active_pos = self.state.team_pred[self.state.active_idx, self.timestep]
         player_pos = self.state.team_pred[self.player, self.timestep]
@@ -276,29 +247,39 @@ class ShortPass(Plan):
             pos_b=self.pos,
             timestep=self.timestep,
         )
-        # if small_cone_angle < 10:
-        #     self.value *= 0.9
 
         pass_distance = nav.dist_1d(active_pos, player_pos)
 
+        opp_dist_to_line = calc.min_opp_dist_to_line(
+            self.state, active_pos, player_pos, timestep=self.timestep
+        )
+
+        opp_dist_to_active = calc.get_min_opp_distance(self.state, active_pos, timestep=self.timestep)
+
         prb_success = models.short_pass_success(
-            pass_error_diff=self.error_diff,
-            pos_score_posx=self.pos_score_data["posx"]["val"],
-            pos_score_dnet=self.pos_score_data["dnet"]["val"],
-            pos_score_dopp=self.pos_score_data["dopp"]["val"],
+            pass_error_diff=self.pass_error_diff,
+            pos_score_posx=self.pos_score_data["posx"],
+            pos_score_dnet=self.pos_score_data["dnet"],
+            pos_score_dopp=self.pos_score_data["dopp"],
             small_cone_angle=small_cone_angle,
             pass_distance=pass_distance,
+            opp_dist_to_line=opp_dist_to_line,
+            opp_dist_to_active=opp_dist_to_active,
         )
-        self.value *= prb_success
+        self.value *= prb_success ** config.RISK_AVERSION
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
             self.value *= 0.5
 
         self.eval_data = {
+            "pass_error": self.pass_error,
+            "pass_error_diff": self.pass_error_diff,
             "pos_offside": pos_offside,
             "small_cone_angle": small_cone_angle,
             "pass_distance": pass_distance,
+            "opp_dist_to_line": opp_dist_to_line,
+            "opp_dist_to_active": opp_dist_to_active,
             "prb_success": prb_success,
         }
 
@@ -318,8 +299,6 @@ class ShortPass(Plan):
                 {
                     "type": "SHORT_PASS_ATTEMPT",
                     "player": self.player,
-                    "pass_error": self.error,
-                    "pass_error_diff": self.error_diff,
                     "pos_score_data": self.pos_score_data,
                     "eval_data": self.eval_data,
                 }
@@ -329,6 +308,7 @@ class ShortPass(Plan):
 
 class LongPass(Plan):
     name = "LONG_PASS"
+    randomisable = True
 
     def __init__(
         self,
@@ -340,8 +320,8 @@ class LongPass(Plan):
     ):
         self.player = player
         self.action_direction = action_direction
-        self.error = error
-        self.error_diff = error_diff
+        self.pass_error = error
+        self.pass_error_diff = error_diff
         self.follow_through = False
         super().__init__(timestep=timestep)
 
@@ -368,26 +348,38 @@ class LongPass(Plan):
 
         pass_distance = nav.dist_1d(active_pos, player_pos)
 
+        opp_dist_to_line = calc.min_opp_dist_to_line(
+            self.state, active_pos, self.pos, timestep=self.timestep
+        )
+
+        opp_dist_to_active = calc.get_min_opp_distance(self.state, active_pos, timestep=self.timestep)
+
         prb_success = models.long_pass_success(
-            pass_error_diff=self.error_diff,
-            pos_score_posx=self.pos_score_data["posx"]["val"],
-            pos_score_dnet=self.pos_score_data["dnet"]["val"],
-            pos_score_dopp=self.pos_score_data["dopp"]["val"],
+            pass_error_diff=self.pass_error_diff,
+            pos_score_posx=self.pos_score_data["posx"],
+            pos_score_dnet=self.pos_score_data["dnet"],
+            pos_score_dopp=self.pos_score_data["dopp"],
             small_cone_angle=small_cone_angle,
             forward_cone_angle=forward_cone_angle,
             pass_distance=pass_distance,
+            opp_dist_to_line=opp_dist_to_line,
+            opp_dist_to_active=opp_dist_to_active,
         )
-        self.value *= prb_success
+        self.value *= prb_success ** config.RISK_AVERSION
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
             self.value *= 0.5
 
         self.eval_data = {
+            "pass_error": self.pass_error,
+            "pass_error_diff": self.pass_error_diff,
             "pos_offside": pos_offside,
             "small_cone_angle": small_cone_angle,
             "forward_cone_angle": forward_cone_angle,
             "pass_distance": pass_distance,
+            "opp_dist_to_line": opp_dist_to_line,
+            "opp_dist_to_active": opp_dist_to_active,
             "prb_success": prb_success,
         }
 
@@ -410,8 +402,6 @@ class LongPass(Plan):
                 {
                     "type": "LONG_PASS_ATTEMPT",
                     "player": self.player,
-                    "pass_error": self.error,
-                    "pass_error_diff": self.error_diff,
                     "pos_score_data": self.pos_score_data,
                     "eval_data": self.eval_data,
                 }
@@ -428,18 +418,18 @@ class HighPass(Plan):
 
     def evaluate(self):
         self.value = 0.0
-        if self.state.active_pos[0] < 0.0:
-            self.value = 12.0
+        if self.state.active_pos[0] > 0.85:
+            if abs(self.state.active_pos[1]) > 0.15:
+                self.value = 52.0
 
     def get_position(self):
-        pos = self.state.active_pos.copy()
-        pos[0] = 0.5
-        return pos
+        return nav.opp_goal
 
     def get_action(self):
         if self.follow_through:
-            if Action.Right not in self.state.sticky_actions:
-                return Action.Right
+            desired_act = nav.get_action_direction(self.state.active_pos, self.pos)
+            if desired_act not in self.state.sticky_actions:
+                return desired_act
             elif self.state.is_sprinting:
                 return Action.ReleaseSprint
             else:

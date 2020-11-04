@@ -1,42 +1,12 @@
 import plotly.graph_objects as go
 import numpy as np
-import pandas as pd
-from copy import deepcopy
+# import pandas as pd
+# from copy import deepcopy
 
 from . import navigation as nav
+from . import data
 
 # from ipywidgets import interact
-
-
-def filter_log_step(log_step, **kwargs):
-    """Returns filtered log step (creates a copy)"""
-    out = list()
-    for rec in log_step:
-        for k, values in kwargs.items():
-            if not isinstance(values, (list, tuple)):
-                values = [values]
-            for v in values:
-                if rec[k] == v:
-                    out.append(deepcopy(rec))
-    return out
-
-
-def filter_log(log, **kwargs):
-    """Filters each step in a log (creates a copy, drops empty steps)"""
-    # import pdb; pdb.set_trace()
-    out = list()
-    for log_step in log:
-        filtered_step = filter_log_step(log_step, **kwargs)
-        if len(filtered_step):
-            out.append(filtered_step)
-    return out
-
-
-def parse_log_to_df(log, **kwargs):
-    rows = list()
-    for step in log:
-        rows.extend(step)
-    return pd.json_normalize(rows)
 
 
 def print_diagnostics(state, log_step):
@@ -48,7 +18,7 @@ def print_diagnostics(state, log_step):
 
     array = [["" for _ in range(n_cols)] for _ in range(n_rows)]
 
-    eot_rec = filter_log_step(log_step, type="END_OF_TURN")[0]
+    eot_rec = data.filter_log_step(log_step, type="END_OF_TURN")[0]
 
     # left column
     array[0][0] = f"mode: {eot_rec['game_mode']}"
@@ -65,7 +35,7 @@ def print_diagnostics(state, log_step):
     array[11][0] = f"will collide with opp at: {eot_rec['will_collide_with_opp_at']}"
     array[12][0] = f"elapsed time: {round(eot_rec['elapsed_time'], 6)}"
 
-    shot_eval = filter_log_step(log_step, type="SHOT_EVALUATION")
+    shot_eval = data.filter_log_step(log_step, type="SHOT_EVALUATION")
     if len(shot_eval):
         array[13][0] = f"shot view of net: {round(shot_eval[0]['view_of_net'], 4)}"
         array[14][0] = f"shot dist to net: {round(shot_eval[0]['distance_to_net'], 4)}"
@@ -73,7 +43,7 @@ def print_diagnostics(state, log_step):
     # right column
     max_plans = n_rows
     n_plans = 0
-    for rec in filter_log_step(log_step, type="PLAN"):
+    for rec in data.filter_log_step(log_step, type="PLAN"):
         # active = " (ACTIVE)" if rec["active"] else ""
         # array[n_plans][1] = f"{rec['plan']}{active} / {rec['value']} / {rec['pos']}"
         text = (
@@ -131,7 +101,7 @@ def get_traces(state, log_step):
 
     s = state
 
-    eot_rec = filter_log_step(log_step, type="END_OF_TURN")[0]
+    eot_rec = data.filter_log_step(log_step, type="END_OF_TURN")[0]
 
     active_intercepts = eot_rec["active_intercepts"]
     active_intercepts += [np.nan] * (6 - len(active_intercepts))
@@ -140,23 +110,14 @@ def get_traces(state, log_step):
     n_targets_to_show = 6
     target_pos = np.ones(shape=(n_targets_to_show, 2)) * -99
     target_tooltip = Tooltip()
-    for i, rec in enumerate(filter_log_step(log_step, type="PLAN")):
+    for i, rec in enumerate(data.filter_log_step(log_step, type="PLAN")):
         target_pos[i] = rec["pos"]
         target_tooltip.append(
             plan=rec["plan"],
             action_direction=rec["action_direction"],
             pass_error=round(rec["pass_error"], 4),
             pass_error_diff=round(rec["pass_error_diff"], 4),
-            base_score=round(rec["pos_score"]["base"]["score"], 4),
-            posx_val=round(rec["pos_score"]["posx"]["val"], 4),
-            posx_score=round(rec["pos_score"]["posx"]["score"], 4),
-            dnet_val=round(rec["pos_score"]["dnet"]["val"], 4),
-            dnet_score=round(rec["pos_score"]["dnet"]["score"], 4),
-            view_val=round(rec["pos_score"]["view"]["val"], 4),
-            view_score=round(rec["pos_score"]["view"]["score"], 4),
-            dopp_val=round(rec["pos_score"]["dopp"]["val"], 4),
-            dopp_score=round(rec["pos_score"]["dopp"]["score"], 4),
-            total_score=round(rec["pos_score"]["total"]["score"], 4),
+            pos_score=round(rec["pos_score_data"]["score"], 4),
             value=round(rec["value"], 4),
         )
         if i == n_targets_to_show - 1:

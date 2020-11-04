@@ -66,13 +66,9 @@ def position_offside(state, pos, timestep=0):
     return 0.0
 
 
-# def position_evaluation(state, pos, timestep=0):
-#     value = (
-#         15
-#         + (pos[0] * 2)
-#         + (get_distance_to_net(pos) * -10)
-#         + (get_view_of_net(state, pos, timestep) * 15)
-#         + (get_min_opp_distance(state, pos, timestep)) * 2
-#         # + (get_min_team_distance(state, pos, timestep)) * -10
-#     )
-#     return value
+def min_opp_dist_to_line(state, pos_a, pos_b, timestep=0):
+    opp_dists = [
+        nav.dist_from_point_to_line_segment(opp_pos, pos_a, pos_b)
+        for opp_pos in state.opp_pred[:, timestep]
+    ]
+    return min(opp_dists)
