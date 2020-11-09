@@ -1,10 +1,9 @@
 import numpy as np
 from kaggle_environments.envs.football.helpers import Action, GameMode
 
-from . import models
-from . import config
-from . import navigation as nav
 from . import calculation as calc
+from . import config, models
+from . import navigation as nav
 
 # this is later set in the agent - I did this for convenience so that
 # I wouldn't have to explicitly pass the state around all the time
@@ -78,12 +77,13 @@ class Plan:
             "type": "PLAN",
             "plan": self.name,
             "pos": self.pos.round(4),
+            "timestep": round(self.timestep, 4),
             "dist": round(self.dist, 4),
             "value": self.value,
             "pos_score_data": self.pos_score_data,
             "action_direction": getattr(self, "action_direction", None),
-            "pass_error": getattr(self, "error", -999.0),
-            "pass_error_diff": getattr(self, "error_diff", -999.0),
+            "pass_error": getattr(self, "pass_error", -999.0),
+            "pass_error_diff": getattr(self, "pass_error_diff", -999.0),
         }
 
 
@@ -179,6 +179,7 @@ class MoveWithBall(Plan):
             self.value *= 0.01
 
         self.eval_data = {
+            "timestep": self.timestep,
             "close_opp_dir_change": close_opp_dir_change,
             "small_cone_angle": small_cone_angle,
             "outside_pitch": outside_pitch,
@@ -251,7 +252,9 @@ class ShortPass(Plan):
             self.state, active_pos, player_pos, timestep=self.timestep
         )
 
-        opp_dist_to_active = calc.get_min_opp_distance(self.state, active_pos, timestep=self.timestep)
+        opp_dist_to_active = calc.get_min_opp_distance(
+            self.state, active_pos, timestep=self.timestep
+        )
 
         prb_success = models.short_pass_success(
             pass_error_diff=self.pass_error_diff,
@@ -270,6 +273,7 @@ class ShortPass(Plan):
             self.value *= 0.5
 
         self.eval_data = {
+            "timestep": self.timestep,
             "pass_error": self.pass_error,
             "pass_error_diff": self.pass_error_diff,
             "pos_offside": pos_offside,
@@ -349,7 +353,9 @@ class LongPass(Plan):
             self.state, active_pos, self.pos, timestep=self.timestep
         )
 
-        opp_dist_to_active = calc.get_min_opp_distance(self.state, active_pos, timestep=self.timestep)
+        opp_dist_to_active = calc.get_min_opp_distance(
+            self.state, active_pos, timestep=self.timestep
+        )
 
         prb_success = models.long_pass_success(
             pass_error_diff=self.pass_error_diff,
@@ -369,6 +375,7 @@ class LongPass(Plan):
             self.value *= 0.5
 
         self.eval_data = {
+            "timestep": self.timestep,
             "pass_error": self.pass_error,
             "pass_error_diff": self.pass_error_diff,
             "pos_offside": pos_offside,

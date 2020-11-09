@@ -7,8 +7,8 @@ from functools import partial
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from sklearn.model_selection import GridSearchCV
+from tqdm import tqdm
 
 from cicada.utils import data
 
@@ -32,10 +32,12 @@ def make_dataset(inner_function, filename, incremental=True):
     if incremental:
         try:
             existing_df = pd.read_pickle(df_path)
-            existing_length = len(existing_df)
+            existing_length = existing_df.game_id.max() + 1
         except FileNotFoundError:
+            existing_df = None
             existing_length = 0
     else:
+        existing_df = None
         existing_length = 0
 
     dfs = list()
@@ -430,17 +432,17 @@ def position_score(
     # ]])[0]
     return max(
         min(
-            181.1331806395123
-            + -44.42213922157399 * posx
-            + 0.0 * posy
-            + -111.73963266453272 * dnet
-            + 13.583451757803484 * view
-            + 82.9471650898806 * dopp
-            + -174.70638402206689 * np.log10(posx + 2.0)
-            + 0.0 * posy ** 2
-            + 3.0419922087739772 * dnet ** 2
-            + -5.5667928903785215 * view ** 2
-            + -505.0449817847152 * dopp ** 2,
+            307.0343597796267
+            + -79.6126832391322 * posx
+            + 3.18168640712528 * abs(posy)
+            + -170.84343408637883 * dnet
+            + 15.225679584757794 * view
+            + 87.82098757983785 * dopp
+            + -366.6045294401938 * np.log10(posx + 2.0)
+            + 80.09708098058961 * posy ** 2
+            + -8.123204679740764 * dnet ** 2
+            + -6.602709094607595 * view ** 2
+            + -528.3954428038661 * dopp ** 2,
             50.0,
         ),
         0,
@@ -450,6 +452,8 @@ def position_score(
 if __name__ == "__main__":
 
     # tests:
+
+    short_pass_df = make_short_pass_dataset()
 
     short_pass_features = lgb_model_specs["short_pass_success"]["features"].keys()
     short_pass_success(**{k: 1.0 for k in short_pass_features})

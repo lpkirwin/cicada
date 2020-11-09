@@ -4,14 +4,13 @@ from multiprocessing import Pool
 from kaggle_environments import make
 
 from cicada import agent
-from cicada.utils import models
-from cicada.utils import data
+from cicada.utils import data, models
 
-INIT_NEW_FILES = True
-N_GAMES_PER_ROUND = 400
-N_ROUNDS = 4
+INIT_NEW_FILES = False
+N_GAMES_PER_ROUND = 200
+N_ROUNDS = 5
 N_PROCESSES = 5
-NOISE_SD = 1.0
+NOISE_SD = 0.1
 
 
 def simulate_one_game(game_num):
@@ -57,14 +56,14 @@ if __name__ == "__main__":
         data.init_log_file()
         data.init_score_file()
         n_games_start = 0
-        print("initialising new game data")
+        print("initialised new game data")
     else:
         n_games_start = data.get_n_games()
         print(f"adding to existing {n_games_start} games")
 
-    for round in range(N_ROUNDS):
+    agent.plans.models.load_lgb_models(quiet=False)
 
-        agent.plans.models.reload_lgb_models_if_needed(quiet=False)
+    for round in range(N_ROUNDS):
         start_time = datetime.datetime.now()
         print("simulating matches...")
 
@@ -83,5 +82,6 @@ if __name__ == "__main__":
 
         for name, spec in models.lgb_model_specs.items():
             models.fit_lgb_model(spec)
+        agent.plans.models.reload_lgb_models_if_needed(quiet=False)
 
     print("done all rounds")

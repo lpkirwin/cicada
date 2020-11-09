@@ -115,6 +115,7 @@ def get_traces(state, log_step):
         target_tooltip.append(
             plan=rec["plan"],
             action_direction=rec["action_direction"],
+            timestep=rec.get("timestep", None),
             pass_error=round(rec["pass_error"], 4),
             pass_error_diff=round(rec["pass_error_diff"], 4),
             pos_score=round(rec["pos_score_data"]["score"], 4),

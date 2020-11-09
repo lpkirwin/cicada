@@ -1,6 +1,7 @@
+import json
 import os
 from copy import deepcopy
-import json
+
 import numpy as np
 import pandas as pd
 from kaggle_environments.envs.football.helpers import (
@@ -10,20 +11,18 @@ from kaggle_environments.envs.football.helpers import (
     sticky_index_to_action,
 )
 
-from . import navigation as nav
-from . import config
-
 # from . import plans
 from . import calculation as calc
+from . import config
+from . import navigation as nav
 
-
-FILEPATH = os.path.dirname(os.path.abspath(__file__))
+FILEPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_PATH = os.path.join(FILEPATH, "log.jsonl")
 SCORE_PATH = os.path.join(FILEPATH, "score.csv")
 
 
 def clean_observation(obs):
-    # same as 'human_readable_agent' for now
+    # same as 'human_readable_agent' from kaggle-environments for now
     obs = obs["players_raw"][0]
     obs["sticky_actions"] = [  # set or list?
         sticky_index_to_action[nr]
