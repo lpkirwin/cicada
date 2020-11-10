@@ -79,6 +79,7 @@ class Plan:
             "pos": self.pos.round(4),
             "timestep": round(self.timestep, 4),
             "dist": round(self.dist, 4),
+            "rand": getattr(self, "rand", 0.0),
             "value": self.value,
             "pos_score_data": self.pos_score_data,
             "action_direction": getattr(self, "action_direction", None),
@@ -170,6 +171,7 @@ class MoveWithBall(Plan):
             close_opp_dir_change=close_opp_dir_change,
             small_cone_angle=small_cone_angle,
             angle_diff=angle_diff,
+            timestep=self.timestep,
         )
         self.value *= prb_success ** config.RISK_AVERSION
 
@@ -265,6 +267,7 @@ class ShortPass(Plan):
             pass_distance=pass_distance,
             opp_dist_to_line=opp_dist_to_line,
             opp_dist_to_active=opp_dist_to_active,
+            timestep=self.timestep,
         )
         self.value *= prb_success ** config.RISK_AVERSION
 
@@ -274,6 +277,7 @@ class ShortPass(Plan):
 
         self.eval_data = {
             "timestep": self.timestep,
+            "kick_countdown": self.state.player_kicked_countdown_timer,
             "pass_error": self.pass_error,
             "pass_error_diff": self.pass_error_diff,
             "pos_offside": pos_offside,
@@ -289,12 +293,24 @@ class ShortPass(Plan):
 
     def get_action(self):
         if self.follow_through:
+
+            # update any existing attempt event with new data
+            self.state.update_rec_in_log_queue(
+                {
+                    "type": "SHORT_PASS_ATTEMPT",
+                    "player": self.player,
+                    "pos_score_data": self.pos_score_data,
+                    "eval_data": self.eval_data,
+                }
+            )
+
             if self.action_direction not in self.state.sticky_actions:
                 return self.action_direction
             elif self.state.is_sprinting:
                 return Action.ReleaseSprint
             else:
                 return Action.Idle
+
         else:
             self.state.put_in_log_queue(
                 {
@@ -367,6 +383,7 @@ class LongPass(Plan):
             pass_distance=pass_distance,
             opp_dist_to_line=opp_dist_to_line,
             opp_dist_to_active=opp_dist_to_active,
+            timestep=self.timestep,
         )
         self.value *= prb_success ** config.RISK_AVERSION
 
@@ -376,6 +393,7 @@ class LongPass(Plan):
 
         self.eval_data = {
             "timestep": self.timestep,
+            "kick_countdown": self.state.player_kicked_countdown_timer,
             "pass_error": self.pass_error,
             "pass_error_diff": self.pass_error_diff,
             "pos_offside": pos_offside,
@@ -395,12 +413,24 @@ class LongPass(Plan):
 
     def get_action(self):
         if self.follow_through:
+
+            # update any existing attempt event with new data
+            self.state.update_rec_in_log_queue(
+                {
+                    "type": "LONG_PASS_ATTEMPT",
+                    "player": self.player,
+                    "pos_score_data": self.pos_score_data,
+                    "eval_data": self.eval_data,
+                }
+            )
+
             if self.action_direction not in self.state.sticky_actions:
                 return self.action_direction
             elif self.state.is_sprinting:
                 return Action.ReleaseSprint
             else:
                 return Action.Idle
+
         else:
             self.state.put_in_log_queue(
                 {

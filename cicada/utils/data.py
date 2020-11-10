@@ -64,12 +64,28 @@ class State:
         record["queued_at"] = self.step
         self.log_queue.append(record)
 
-    def write_log_queue_to_log(self, max_age=10):
+    def update_rec_in_log_queue(self, record, keys=["type"]):
+        for existing_rec in self.log_queue:
+            do_update = True
+            for key in keys:
+                if existing_rec.get(key) != record.get(key):
+                    do_update = False
+            if do_update:
+                existing_rec.update(record)
+                existing_rec["updated_at"] = self.step
+
+    def write_log_queue_to_log(self, max_age=10, filters=None):
+        filters = filters or dict()
         while len(self.log_queue):
             record = self.log_queue.pop()
             age = self.step - record["queued_at"]
             if age <= max_age:  # TODO: should I filter these ex-post?
-                self.write_to_log(record)
+                do_write = True
+                for key, value in filters.items():
+                    if record.get(key) != value:
+                        do_write = False
+                if do_write:
+                    self.write_to_log(record)
 
     def write_to_log(self, record):
         record["step"] = self.step
@@ -102,7 +118,13 @@ class State:
         if obs["active"] != self.active_idx:
             if self.player_kicked_countdown_timer > 0:
                 self.write_to_log({"type": "KICK_RELEASE"})
-                self.write_log_queue_to_log()
+                self.write_log_queue_to_log(filters={"player": obs["active"]})
+                # ^ may have evaluation data for passes to multiple players,
+                # but we only want to keep records for the player we actually
+                # end up attempting the pass to (it's possible that we pass
+                # to a player that we don't have an 'attempt' event to, in
+                # which case we won't record the pass at all in our training
+                # data)
 
         self.ball_pos = np.array(obs["ball"])
         self.ball_dir = np.array(obs["ball_direction"])
