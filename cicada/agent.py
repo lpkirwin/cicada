@@ -114,10 +114,10 @@ class Agent:
                         plan.name += "_FT"
 
         # randomise values
-        if self.noise_sd > 0:
-            for plan in potential_plans:
-                if plan.randomisable:
-                    plan.value += np.random.normal(loc=0.0, scale=self.noise_sd)
+        for plan in potential_plans:
+            if plan.randomisable:
+                plan.rand = np.random.normal(loc=0.0, scale=self.noise_sd)
+                plan.value += plan.rand
 
         # pick the best plan
         potential_plans = sorted(potential_plans, key=lambda x: -x.value)
