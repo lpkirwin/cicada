@@ -8,9 +8,9 @@ from cicada.utils import data, models
 
 INIT_NEW_FILES = False
 N_GAMES_PER_ROUND = 200
-N_ROUNDS = 5
+N_ROUNDS = 1
 N_PROCESSES = 5
-NOISE_SD = 0.1
+NOISE_SD = 0.05
 
 
 def simulate_one_game(game_num):

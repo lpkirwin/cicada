@@ -47,8 +47,9 @@ def print_diagnostics(state, log_step):
         # active = " (ACTIVE)" if rec["active"] else ""
         # array[n_plans][1] = f"{rec['plan']}{active} / {rec['value']} / {rec['pos']}"
         text = (
-            str(rec["plan"]).ljust(18)
-            + "{:.2f}".format(rec["value"]).rjust(8)
+            str(rec["plan"]).ljust(16)
+            + "{:.2f}".format(rec["value"]).rjust(7)
+            + "{:.2f}".format(rec.get("rand", 0.0)).rjust(7)
             + str(rec["pos"].round(3)).rjust(20)
         )
         array[n_plans][1] = text
