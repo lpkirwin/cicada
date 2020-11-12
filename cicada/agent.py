@@ -78,7 +78,7 @@ class Agent:
                     plans.ShortPass(
                         player,
                         action,
-                        timestep=config.SHORT_PASS_TIMESTEP + extra_timestep,
+                        timestep=config.PASS_TIMESTEP + extra_timestep,
                         error=error,
                         error_diff=error_diff,
                     )
@@ -87,12 +87,12 @@ class Agent:
                     plans.LongPass(
                         player,
                         action,
-                        timestep=config.LONG_PASS_TIMESTEP + extra_timestep,
+                        timestep=config.PASS_TIMESTEP + extra_timestep,
                         error=error,
                         error_diff=error_diff,
                     )
                 )
-
+                
             for action, vector in nav.action_to_vector_map.items():
                 potential_plans.append(
                     plans.MoveWithBall(
@@ -104,7 +104,10 @@ class Agent:
         # boost follow-through plans
         if state.player_kicked_countdown_timer > 0:
             if state.active_idx == state.player_kicked:
-                time_since_kick = abs(state.player_kicked_countdown_timer - 10)
+                time_since_kick = abs(
+                    state.player_kicked_countdown_timer
+                    - config.KICK_COUNTDOWN_TIMER_START
+                )
                 for plan in potential_plans:
                     if isinstance(plan, state.follow_through_plan):
                         plan.follow_through = True
@@ -131,7 +134,7 @@ class Agent:
         # if we've kicked the ball, activate follow-through
         if action in [Action.ShortPass, Action.LongPass, Action.HighPass, Action.Shot]:
             state.player_kicked = state.active_idx
-            state.player_kicked_countdown_timer = 10
+            state.player_kicked_countdown_timer = config.KICK_COUNTDOWN_TIMER_START
             state.follow_through_plan = type(plan)
 
         for plan in potential_plans:
