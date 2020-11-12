@@ -7,10 +7,10 @@ from cicada import agent
 from cicada.utils import data, models
 
 INIT_NEW_FILES = False
-N_GAMES_PER_ROUND = 50
-N_ROUNDS = 25
+N_GAMES_PER_ROUND = 100
+N_ROUNDS = 11
 N_PROCESSES = 5
-NOISE_SD = 1.0
+NOISE_SD = 0.5
 
 
 def simulate_one_game(game_num):

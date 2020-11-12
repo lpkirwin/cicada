@@ -1,5 +1,6 @@
 import plotly.graph_objects as go
 import numpy as np
+
 # import pandas as pd
 # from copy import deepcopy
 
@@ -25,20 +26,21 @@ def print_diagnostics(state, log_step):
     array[1][0] = f"score: {state.obs['score']}"
     array[2][0] = f"sticky: [{', '.join([act.name for act in state.sticky_actions])}]"
     array[3][0] = f"action: [{eot_rec['action'].name}]"
-    array[4][0] = f"active player: {state.active_idx}"
-    array[5][0] = f"active degrees: {round(state.active_deg, 4)}"
-    array[6][0] = f"active velocity: {round(state.active_vel, 4)}"
-    array[7][0] = f"kick countdown: {eot_rec['kick_countdown']}"
-    array[8][0] = f"kick player: {eot_rec['kick_player']}"
-    array[9][0] = f"will receive ball at: {eot_rec['will_receive_ball_at']}"
-    array[10][0] = f"can receive ball at: {eot_rec['can_receive_ball_at']}"
-    array[11][0] = f"will collide with opp at: {eot_rec['will_collide_with_opp_at']}"
-    array[12][0] = f"elapsed time: {round(eot_rec['elapsed_time'], 6)}"
+    array[4][0] = f"ball_owned_team: [{state.obs['ball_owned_team']}]"
+    array[5][0] = f"active player: {state.active_idx}"
+    array[6][0] = f"active degrees: {round(state.active_deg, 4)}"
+    array[7][0] = f"active velocity: {round(state.active_vel, 4)}"
+    array[8][0] = f"kick countdown: {eot_rec['kick_countdown']}"
+    array[9][0] = f"kick player: {eot_rec['kick_player']}"
+    array[10][0] = f"will receive ball at: {eot_rec['will_receive_ball_at']}"
+    array[11][0] = f"can receive ball at: {eot_rec['can_receive_ball_at']}"
+    array[12][0] = f"will collide with opp at: {eot_rec['will_collide_with_opp_at']}"
+    array[13][0] = f"elapsed time: {round(eot_rec['elapsed_time'], 6)}"
 
     shot_eval = data.filter_log_step(log_step, type="SHOT_EVALUATION")
     if len(shot_eval):
-        array[13][0] = f"shot view of net: {round(shot_eval[0]['view_of_net'], 4)}"
-        array[14][0] = f"shot dist to net: {round(shot_eval[0]['distance_to_net'], 4)}"
+        array[14][0] = f"shot view of net: {round(shot_eval[0]['view_of_net'], 4)}"
+        array[15][0] = f"shot dist to net: {round(shot_eval[0]['distance_to_net'], 4)}"
 
     # right column
     max_plans = n_rows
@@ -49,8 +51,8 @@ def print_diagnostics(state, log_step):
         text = (
             str(rec["plan"]).ljust(16)
             + "{:.2f}".format(rec["value"]).rjust(7)
-            + "{:.2f}".format(rec.get("rand", 0.0)).rjust(7)
-            + str(rec["pos"].round(3)).rjust(20)
+            + "{:.2%}".format(rec["eval_data"].get("prb_success", 0.0)).rjust(8)
+            + str(rec["pos"].round(3)).rjust(18)
         )
         array[n_plans][1] = text
         n_plans += 1
@@ -120,6 +122,7 @@ def get_traces(state, log_step):
             pass_error=round(rec["pass_error"], 4),
             pass_error_diff=round(rec["pass_error_diff"], 4),
             pos_score=round(rec["pos_score_data"]["score"], 4),
+            prb_success=round(rec["eval_data"].get("prb_success", 0.0), 4),
             value=round(rec["value"], 4),
         )
         if i == n_targets_to_show - 1:
@@ -142,9 +145,7 @@ def get_traces(state, log_step):
     right_tooltip.add(pos_y=s.opp_pos[:, 1].round(4))
     right_tooltip.add(dir_x=s.opp_dir[:, 0].round(4))
     right_tooltip.add(dir_y=s.opp_dir[:, 1].round(4))
-    right_tooltip.add(
-        dist_to_active=nav.dist_2d(s.opp_pos, s.active_pos).round(4)
-    )
+    right_tooltip.add(dist_to_active=nav.dist_2d(s.opp_pos, s.active_pos).round(4))
 
     ball_tooltip = Tooltip()
     ball_tooltip.add(pos_x=round(s.ball_pos[0], 4))
@@ -310,7 +311,9 @@ def get_traces(state, log_step):
             y=[s.active_pos[1]],
             mode="markers",
             marker=dict(
-                color="deepskyblue", opacity=1 if s.left_has_ball else 0, size=10
+                color="deepskyblue",
+                opacity=1 if s.left_has_ball else 0,
+                size=10,
             ),
             text="",
             hoverinfo="skip",
@@ -399,6 +402,6 @@ def make_figure_widget(n_traces=30):
     )
 
     for _ in range(n_traces):
-        fig.add_scatter(x=[0], y=[0], fillcolor="rgba(0,0,0,0)")
+        fig.add_scatter(x=[0], y=[0])  # , fillcolor="rgba(0,0,0,0)")
 
     return fig
