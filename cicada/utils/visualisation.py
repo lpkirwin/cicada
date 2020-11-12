@@ -108,7 +108,7 @@ def get_traces(state, log_step):
     active_intercepts += [np.nan] * (6 - len(active_intercepts))
     active_intercepts = active_intercepts[:6]
 
-    n_targets_to_show = 6
+    n_targets_to_show = 10
     target_pos = np.ones(shape=(n_targets_to_show, 2)) * -99
     target_tooltip = Tooltip()
     for i, rec in enumerate(data.filter_log_step(log_step, type="PLAN")):

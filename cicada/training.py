@@ -7,10 +7,10 @@ from cicada import agent
 from cicada.utils import data, models
 
 INIT_NEW_FILES = False
-N_GAMES_PER_ROUND = 200
-N_ROUNDS = 1
+N_GAMES_PER_ROUND = 50
+N_ROUNDS = 25
 N_PROCESSES = 5
-NOISE_SD = 0.05
+NOISE_SD = 1.0
 
 
 def simulate_one_game(game_num):
@@ -79,6 +79,7 @@ if __name__ == "__main__":
         print("average scores:")
         scores = data.get_score_file_as_df()
         print(scores.iloc[n_games_start:].mean())
+        n_games_start += N_GAMES_PER_ROUND
 
         for name, spec in models.lgb_model_specs.items():
             models.fit_lgb_model(spec)

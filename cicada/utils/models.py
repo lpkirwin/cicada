@@ -11,8 +11,12 @@ from sklearn.model_selection import GridSearchCV
 from tqdm import tqdm
 
 from cicada.utils import data
+from cicada.utils import config
 
 FILEPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# INCREMENTAL_DATA = True
+# GAME_WEIGHTING_FACTOR = 0.5
 
 # SHORT_PASS_MODEL_PATH = os.path.join(FILEPATH, "short_pass_model.pkl")
 # LONG_PASS_MODEL_PATH = os.path.join(FILEPATH, "long_pass_model.pkl")
@@ -21,11 +25,11 @@ FILEPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # long_pass_model = joblib.load(LONG_PASS_MODEL_PATH)
 # handle_model = joblib.load(HANDLE_MODEL_PATH)
 
-POSITION_MODEL_PATH = os.path.join(FILEPATH, "position_model.txt")
-position_model = lgb.Booster(model_file=POSITION_MODEL_PATH)
+# POSITION_MODEL_PATH = os.path.join(FILEPATH, "position_model.txt")
+# position_model = lgb.Booster(model_file=POSITION_MODEL_PATH)
 
 
-def make_dataset(inner_function, filename, incremental=True):
+def make_dataset(inner_function, filename, incremental=config.INCREMENTAL_DATA):
 
     df_path = os.path.join(FILEPATH, filename)
 
@@ -208,14 +212,17 @@ lgb_model_specs = {
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
             "pos_score_dopp": "pos_score_data.dopp",
+            "pos_score_kopp": "pos_score_data.kopp",
             "small_cone_angle": "eval_data.small_cone_angle",
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
+            "timestep": "eval_data.timestep",
+            "kick_countdown": "eval_data.kick_countdown",
         },
         "class": lgb.LGBMClassifier,
         "grid": {
-            "n_estimators": list(range(10, 201, 20)),
+            "n_estimators": list(range(10, 301, 30)),
             "num_leaves": [10, 30],
         },
         "scoring": "neg_log_loss",
@@ -228,15 +235,18 @@ lgb_model_specs = {
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
             "pos_score_dopp": "pos_score_data.dopp",
+            "pos_score_kopp": "pos_score_data.kopp",
             "small_cone_angle": "eval_data.small_cone_angle",
             "forward_cone_angle": "eval_data.forward_cone_angle",
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
+            "timestep": "eval_data.timestep",
+            "kick_countdown": "eval_data.kick_countdown",
         },
         "class": lgb.LGBMClassifier,
         "grid": {
-            "n_estimators": list(range(10, 201, 20)),
+            "n_estimators": list(range(10, 301, 30)),
             "num_leaves": [10, 30],
         },
         "scoring": "neg_log_loss",
@@ -249,13 +259,15 @@ lgb_model_specs = {
             "pos_score_dnet": "pos_score_data.dnet",
             "pos_score_view": "pos_score_data.view",
             "pos_score_dopp": "pos_score_data.dopp",
+            "pos_score_kopp": "pos_score_data.kopp",
             "close_opp_dir_change": "eval_data.close_opp_dir_change",
             "small_cone_angle": "eval_data.small_cone_angle",
             "angle_diff": "eval_data.angle_diff",
+            "timestep": "eval_data.timestep",
         },
         "class": lgb.LGBMClassifier,
         "grid": {
-            "n_estimators": list(range(10, 201, 20)),
+            "n_estimators": list(range(10, 301, 30)),
             "num_leaves": [10, 30],
         },
         "scoring": "neg_log_loss",
@@ -277,8 +289,13 @@ def fit_lgb_model(model_spec):
     )
     X = df[ms["features"].values()]
     y = df["target"]
+    n_games = df["game_id"].max() + 1
+    game_pct = (df["game_id"] + 1) / n_games
+    weights = (
+        config.GAME_WEIGHTING_FACTOR + (1 - config.GAME_WEIGHTING_FACTOR) * game_pct
+    )
     print("fitting", ms["filename"])
-    grid_search.fit(X, y)
+    grid_search.fit(X, y, sample_weight=weights)
     print("best params:", grid_search.best_params_)
     pred = grid_search.predict_proba(X)[:, 1]
     print("distribution of predictions:")
@@ -343,10 +360,13 @@ def short_pass_success(
     pos_score_posx,
     pos_score_dnet,
     pos_score_dopp,
+    pos_score_kopp,
     small_cone_angle,
     pass_distance,
     opp_dist_to_line,
     opp_dist_to_active,
+    timestep,
+    kick_countdown,
 ):
     return lgb_models["short_pass_success"].predict(
         [
@@ -355,10 +375,13 @@ def short_pass_success(
                 pos_score_posx,
                 pos_score_dnet,
                 pos_score_dopp,
+                pos_score_kopp,
                 small_cone_angle,
                 pass_distance,
                 opp_dist_to_line,
                 opp_dist_to_active,
+                timestep,
+                kick_countdown,
             ]
         ]
     )[0]
@@ -369,11 +392,14 @@ def long_pass_success(
     pos_score_posx,
     pos_score_dnet,
     pos_score_dopp,
+    pos_score_kopp,
     small_cone_angle,
     forward_cone_angle,
     pass_distance,
     opp_dist_to_line,
     opp_dist_to_active,
+    timestep,
+    kick_countdown,
 ):
     return lgb_models["long_pass_success"].predict(
         [
@@ -382,11 +408,14 @@ def long_pass_success(
                 pos_score_posx,
                 pos_score_dnet,
                 pos_score_dopp,
+                pos_score_kopp,
                 small_cone_angle,
                 forward_cone_angle,
                 pass_distance,
                 opp_dist_to_line,
                 opp_dist_to_active,
+                timestep,
+                kick_countdown,
             ]
         ]
     )[0]
@@ -397,9 +426,11 @@ def handle_success(
     pos_score_dnet,
     pos_score_view,
     pos_score_dopp,
+    pos_score_kopp,
     close_opp_dir_change,
     small_cone_angle,
     angle_diff,
+    timestep,
 ):
     return lgb_models["handle_success"].predict(
         [
@@ -408,9 +439,11 @@ def handle_success(
                 pos_score_dnet,
                 pos_score_view,
                 pos_score_dopp,
+                pos_score_kopp,
                 close_opp_dir_change,
                 small_cone_angle,
                 angle_diff,
+                timestep,
             ]
         ]
     )[0]
@@ -422,6 +455,7 @@ def position_score(
     dnet,
     view,
     dopp,
+    kopp,
 ):
     # return position_model.predict([[
     #     1.0,  # accidentally had constant in X
@@ -438,11 +472,13 @@ def position_score(
             + -170.84343408637883 * dnet
             + 15.225679584757794 * view
             + 87.82098757983785 * dopp
+            + 0.0 * kopp
             + -366.6045294401938 * np.log10(posx + 2.0)
             + 80.09708098058961 * posy ** 2
             + -8.123204679740764 * dnet ** 2
             + -6.602709094607595 * view ** 2
-            + -528.3954428038661 * dopp ** 2,
+            + -528.3954428038661 * dopp ** 2
+            + 0.0 * kopp ** 2,
             50.0,
         ),
         0,
@@ -451,17 +487,22 @@ def position_score(
 
 if __name__ == "__main__":
 
-    # tests:
+    # # tests:
 
-    short_pass_df = make_short_pass_dataset()
+    # short_pass_df = make_short_pass_dataset()
 
-    short_pass_features = lgb_model_specs["short_pass_success"]["features"].keys()
-    short_pass_success(**{k: 1.0 for k in short_pass_features})
+    # short_pass_features = lgb_model_specs["short_pass_success"]["features"].keys()
+    # short_pass_success(**{k: 1.0 for k in short_pass_features})
 
-    long_pass_features = lgb_model_specs["long_pass_success"]["features"].keys()
-    long_pass_success(**{k: 1.0 for k in long_pass_features})
+    # long_pass_features = lgb_model_specs["long_pass_success"]["features"].keys()
+    # long_pass_success(**{k: 1.0 for k in long_pass_features})
 
-    handle_features = lgb_model_specs["handle_success"]["features"].keys()
-    handle_success(**{k: 1.0 for k in handle_features})
+    # handle_features = lgb_model_specs["handle_success"]["features"].keys()
+    # handle_success(**{k: 1.0 for k in handle_features})
 
-    print("tests passed")
+    # print("tests passed")
+
+    # train models on existing data
+
+    for name, spec in lgb_model_specs.items():
+        fit_lgb_model(spec)

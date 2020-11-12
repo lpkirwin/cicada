@@ -119,12 +119,64 @@ def pass_error(team_pos, active_idx, action):
     return pass_error
 
 
+# # from: https://github.com/google-research/football/blob/master/third_party/gfootball_engine/src/onthepitch/AIsupport/AIfunctions.cpp#L1093  # noqa
+# def pass_error_2(team_pos, team_dir, active_idx, action, pass_type):
+#     active_pos = team_pos[active_idx]
+#     action_dir = action_to_vector_map[action]
+#     team_dist = dist_2d(team_pos, active_pos)
+
+#     GAUGE_MS = 200  # no idea how to set this at the moment
+#     INPUT_DIRECTION_SCALING = 0.01
+#     DISTANCE_RATING_SCALING = 0.1
+#     TOTAL_SCALING = 30.0
+
+#     gauge_factor = np.clip((GAUGE_MS - 60) / (1000 - 60), 0.0, 1.0)
+
+#     if pass_type == "SHORT_PASS":
+#         input_power = np.clip(gauge_factor ** 0.7, 0.01, 1.0)
+#     elif pass_type == "LONG_PASS":
+#         input_power = np.clip(gauge_factor ** 0.65, 0.01, 1.0)
+#     elif pass_type == "HIGH_PASS":
+#         input_power = np.clip(gauge_factor ** 0.55, 0.01, 1.0)
+#     else:
+#         raise ValueError("unknown pass_type")
+
+#     manual_target = active_pos + action_dir * INPUT_DIRECTION_SCALING * (
+#         input_power * 60.0
+#     ).clip(min=1.0, max=100.0)
+
+#     pass_duration = 0.3 + team_dist * 0.05
+#     target_pos = team_pos + team_dir * pass_duration.reshape(-1, 1)
+#     distance_rating = (
+#         dist_2d(target_pos, manual_target).clip(min=0.0, max=70.0) ** 0.8 * 0.8
+#     ) * DISTANCE_RATING_SCALING
+
+#     radians_vs_action = np.radians(
+#         angle_diff(angle(target_pos - team_pos), angle(action_dir))
+#     )
+#     angle_rating = np.abs(radians_vs_action) / np.pi
+
+#     total_rating = distance_rating + angle_rating
+#     total_rating *= TOTAL_SCALING
+#     total_rating[active_idx] = 99_999.0
+
+#     return total_rating
+
+
 def who_will_receive_pass(team_pos, active_idx, action):
     errors = pass_error(team_pos, active_idx, action)
     predicted_player = np.argmin(errors)
     lowest_error, second_lowest_error = sorted(errors)[:2]
     error_diff = abs(lowest_error - second_lowest_error)
     return predicted_player, lowest_error, error_diff
+
+
+# def who_will_receive_pass_2(team_pos, team_dir, active_idx, action, pass_type):
+#     errors = pass_error_2(team_pos, team_dir, active_idx, action, pass_type)
+#     predicted_player = np.argmin(errors)
+#     lowest_error, second_lowest_error = sorted(errors)[:2]
+#     error_diff = abs(lowest_error - second_lowest_error)
+#     return predicted_player, lowest_error, error_diff
 
 
 def min_opp_angle(

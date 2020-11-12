@@ -64,28 +64,27 @@ class State:
         record["queued_at"] = self.step
         self.log_queue.append(record)
 
-    def update_rec_in_log_queue(self, record, keys=["type"]):
-        for existing_rec in self.log_queue:
-            do_update = True
-            for key in keys:
-                if existing_rec.get(key) != record.get(key):
-                    do_update = False
-            if do_update:
-                existing_rec.update(record)
-                existing_rec["updated_at"] = self.step
-
-    def write_log_queue_to_log(self, max_age=10, filters=None):
+    def write_log_queue_to_log(self, max_age=10, min_age=1, filters=None):
         filters = filters or dict()
-        while len(self.log_queue):
-            record = self.log_queue.pop()
-            age = self.step - record["queued_at"]
-            if age <= max_age:  # TODO: should I filter these ex-post?
-                do_write = True
-                for key, value in filters.items():
-                    if record.get(key) != value:
-                        do_write = False
-                if do_write:
-                    self.write_to_log(record)
+        sorted_queue = sorted(self.log_queue, key=lambda r: r["queued_at"])
+        rec_to_write = None
+        for rec in sorted_queue:
+            age = self.step - rec["queued_at"]
+            if age > max_age or age < min_age:
+                continue
+            keep = False
+            for key, value in filters.items():
+                if rec.get(key) == value:
+                    keep = True
+            if rec_to_write is None:
+                keep = True
+            if keep:
+                rec_to_write = rec
+        if rec_to_write is not None:
+            self.write_to_log(rec_to_write)
+        else:
+            self.write_to_log({"type": "KICK_WITH_NO_ATTEMPT_EVENT"})
+        self.log_queue = list()
 
     def write_to_log(self, record):
         record["step"] = self.step

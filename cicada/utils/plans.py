@@ -43,6 +43,7 @@ class Plan:
         dnet = calc.get_distance_to_net(self.pos)
         view = calc.get_view_of_net(self.state, self.pos, self.timestep)
         dopp = calc.get_min_opp_distance(self.state, self.pos, self.timestep)
+        kopp = calc.get_opp_kernel_density(self.state, self.pos, self.timestep)
 
         pos_score = models.position_score(
             posx=posx,
@@ -50,6 +51,7 @@ class Plan:
             dnet=dnet,
             view=view,
             dopp=dopp,
+            kopp=kopp,
         )
 
         self.pos_score_data = {
@@ -58,6 +60,7 @@ class Plan:
             "dnet": dnet,
             "view": view,
             "dopp": dopp,
+            "kopp": kopp,
             "score": pos_score,
         }
 
@@ -168,6 +171,7 @@ class MoveWithBall(Plan):
             pos_score_dnet=self.pos_score_data["dnet"],
             pos_score_view=self.pos_score_data["view"],
             pos_score_dopp=self.pos_score_data["dopp"],
+            pos_score_kopp=self.pos_score_data["kopp"],
             close_opp_dir_change=close_opp_dir_change,
             small_cone_angle=small_cone_angle,
             angle_diff=angle_diff,
@@ -247,13 +251,10 @@ class ShortPass(Plan):
             pos_b=self.pos,
             timestep=self.timestep,
         )
-
         pass_distance = nav.dist_1d(active_pos, player_pos)
-
-        opp_dist_to_line = calc.min_opp_dist_to_line(
+        opp_dist_to_line = calc.opp_density_to_line(
             self.state, active_pos, player_pos, timestep=self.timestep
         )
-
         opp_dist_to_active = calc.get_min_opp_distance(
             self.state, active_pos, timestep=self.timestep
         )
@@ -263,11 +264,13 @@ class ShortPass(Plan):
             pos_score_posx=self.pos_score_data["posx"],
             pos_score_dnet=self.pos_score_data["dnet"],
             pos_score_dopp=self.pos_score_data["dopp"],
+            pos_score_kopp=self.pos_score_data["kopp"],
             small_cone_angle=small_cone_angle,
             pass_distance=pass_distance,
             opp_dist_to_line=opp_dist_to_line,
             opp_dist_to_active=opp_dist_to_active,
             timestep=self.timestep,
+            kick_countdown=self.state.player_kicked_countdown_timer,
         )
         self.value *= prb_success ** config.RISK_AVERSION
 
@@ -292,34 +295,24 @@ class ShortPass(Plan):
         return self.state.team_pred[self.player, self.timestep]
 
     def get_action(self):
+
+        self.state.put_in_log_queue(
+            {
+                "type": "SHORT_PASS_ATTEMPT",
+                "player": self.player,
+                "pos_score_data": self.pos_score_data,
+                "eval_data": self.eval_data,
+            }
+        )
+
         if self.follow_through:
-
-            # update any existing attempt event with new data
-            self.state.update_rec_in_log_queue(
-                {
-                    "type": "SHORT_PASS_ATTEMPT",
-                    "player": self.player,
-                    "pos_score_data": self.pos_score_data,
-                    "eval_data": self.eval_data,
-                }
-            )
-
             if self.action_direction not in self.state.sticky_actions:
                 return self.action_direction
             elif self.state.is_sprinting:
                 return Action.ReleaseSprint
             else:
                 return Action.Idle
-
         else:
-            self.state.put_in_log_queue(
-                {
-                    "type": "SHORT_PASS_ATTEMPT",
-                    "player": self.player,
-                    "pos_score_data": self.pos_score_data,
-                    "eval_data": self.eval_data,
-                }
-            )
             return Action.ShortPass
 
 
@@ -355,20 +348,16 @@ class LongPass(Plan):
             pos_b=self.pos,
             timestep=self.timestep,
         )
-
         forward_cone_angle = nav.min_opp_angle(
             state=self.state,
             pos_a=player_pos,
             pos_b=self.pos,
             timestep=self.timestep,
         )
-
         pass_distance = nav.dist_1d(active_pos, player_pos)
-
-        opp_dist_to_line = calc.min_opp_dist_to_line(
+        opp_dist_to_line = calc.opp_density_to_line(
             self.state, active_pos, self.pos, timestep=self.timestep
         )
-
         opp_dist_to_active = calc.get_min_opp_distance(
             self.state, active_pos, timestep=self.timestep
         )
@@ -378,12 +367,14 @@ class LongPass(Plan):
             pos_score_posx=self.pos_score_data["posx"],
             pos_score_dnet=self.pos_score_data["dnet"],
             pos_score_dopp=self.pos_score_data["dopp"],
+            pos_score_kopp=self.pos_score_data["kopp"],
             small_cone_angle=small_cone_angle,
             forward_cone_angle=forward_cone_angle,
             pass_distance=pass_distance,
             opp_dist_to_line=opp_dist_to_line,
             opp_dist_to_active=opp_dist_to_active,
             timestep=self.timestep,
+            kick_countdown=self.state.player_kicked_countdown_timer,
         )
         self.value *= prb_success ** config.RISK_AVERSION
 
@@ -412,34 +403,24 @@ class LongPass(Plan):
         ]
 
     def get_action(self):
+
+        self.state.put_in_log_queue(
+            {
+                "type": "LONG_PASS_ATTEMPT",
+                "player": self.player,
+                "pos_score_data": self.pos_score_data,
+                "eval_data": self.eval_data,
+            }
+        )
+        
         if self.follow_through:
-
-            # update any existing attempt event with new data
-            self.state.update_rec_in_log_queue(
-                {
-                    "type": "LONG_PASS_ATTEMPT",
-                    "player": self.player,
-                    "pos_score_data": self.pos_score_data,
-                    "eval_data": self.eval_data,
-                }
-            )
-
             if self.action_direction not in self.state.sticky_actions:
                 return self.action_direction
             elif self.state.is_sprinting:
                 return Action.ReleaseSprint
             else:
                 return Action.Idle
-
         else:
-            self.state.put_in_log_queue(
-                {
-                    "type": "LONG_PASS_ATTEMPT",
-                    "player": self.player,
-                    "pos_score_data": self.pos_score_data,
-                    "eval_data": self.eval_data,
-                }
-            )
             return Action.LongPass
 
 
