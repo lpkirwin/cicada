@@ -85,6 +85,7 @@ class Plan:
             "rand": getattr(self, "rand", 0.0),
             "value": self.value,
             "pos_score_data": self.pos_score_data,
+            "eval_data": getattr(self, "eval_data", dict()),
             "action_direction": getattr(self, "action_direction", None),
             "pass_error": getattr(self, "pass_error", -999.0),
             "pass_error_diff": getattr(self, "pass_error_diff", -999.0),
@@ -644,7 +645,8 @@ class Kickoff(Plan):
 
         if self.state.ball_pos[0] == 0.0:
             if self.state.ball_pos[1] == 0.0:
-                self.value = 200.0
+                if abs(self.state.active_pos[0]) < 0.03:
+                    self.value = 200.0
 
     def get_position(self):
         return nav.opp_goal

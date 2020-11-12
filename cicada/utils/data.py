@@ -50,7 +50,7 @@ class State:
         self.log = [[]]
         self.log_queue = list()
         self.score = [0, 0]
-        self.ball_owned_player = None
+        self.last_touched_player = None
         self.left_has_ball = False
         self.active_idx = None
         self.player_kicked = -1
@@ -102,19 +102,14 @@ class State:
             self.write_to_log({"type": "GOAL_SCORED"})
         self.score = obs["score"]
 
-        if obs["ball_owned_team"] == 0:
-            if obs["ball_owned_player"] != self.ball_owned_player:
-                self.write_to_log(
-                    {"type": "NEW_POSSESSION", "player": obs["ball_owned_player"]}
-                )
-        self.ball_owned_player = obs["ball_owned_player"]
-
         # if we don't have possession, but we had it last turn:
         if obs["ball_owned_team"] != 0 and self.left_has_ball:
             if not self.player_kicked_countdown_timer > 0:
                 self.write_to_log({"type": "LOST_POSSESSION"})
 
-        if obs["active"] != self.active_idx:
+        if (obs["active"] != self.active_idx) or (
+            (obs["ball_owned_team"] != 0) and self.left_has_ball
+        ):
             if self.player_kicked_countdown_timer > 0:
                 self.write_to_log({"type": "KICK_RELEASE"})
                 self.write_log_queue_to_log(filters={"player": obs["active"]})
@@ -125,9 +120,26 @@ class State:
                 # which case we won't record the pass at all in our training
                 # data)
 
+        if obs["ball_owned_team"] >= 0:
+            current_touching_player = (obs["ball_owned_team"], obs["ball_owned_player"])
+        else:
+            current_touching_player = None
+        if current_touching_player != self.last_touched_player:
+            if obs["ball_owned_team"] == 0:
+                self.write_to_log(
+                    {"type": "NEW_POSSESSION", "player": obs["ball_owned_player"]}
+                )
+            elif obs["ball_owned_team"] == 1:
+                self.write_to_log(
+                    {"type": "OPP_POSSESSION", "player": obs["ball_owned_player"]}
+                )
+        if current_touching_player is not None:
+            self.last_touched_player = current_touching_player
+
         self.ball_pos = np.array(obs["ball"])
         self.ball_dir = np.array(obs["ball_direction"])
         self.ball_rot = np.array(obs["ball_rotation"])
+        self.ball_owned_player = obs["ball_owned_player"]
 
         self.team_n_players = len(obs["left_team"])
         self.opp_n_players = len(obs["right_team"])
