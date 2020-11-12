@@ -48,11 +48,12 @@ def make_dataset(inner_function, filename, incremental=config.INCREMENTAL_DATA):
     game_id = existing_length
 
     with data.get_log_file() as file:
-        for i, log in tqdm(enumerate(file), total=data.get_n_games()):
+        for i, log_string in tqdm(enumerate(file), total=data.get_n_games()):
 
             if i < existing_length:
                 continue
 
+            log = json.loads(log_string)
             df = inner_function(log)
 
             if len(df):
@@ -73,7 +74,7 @@ def make_dataset(inner_function, filename, incremental=config.INCREMENTAL_DATA):
 def shot_inner_function(log, n_steps=30):
 
     filtered_log = data.filter_log(
-        log=json.loads(log),
+        log,
         type=("SHOT_ATTEMPT", "GOAL_SCORED"),
     )
     df = data.parse_log_to_df(filtered_log)
@@ -93,8 +94,7 @@ def shot_inner_function(log, n_steps=30):
 def short_pass_inner_function(log, n_steps=30):
 
     filtered_log = data.filter_log(
-        log=json.loads(log),
-        type=("SHORT_PASS_ATTEMPT", "NEW_POSSESSION"),
+        log, type=("SHORT_PASS_ATTEMPT", "NEW_POSSESSION", "OPP_POSSESSION")
     )
     df = data.parse_log_to_df(filtered_log)
 
@@ -113,8 +113,8 @@ def short_pass_inner_function(log, n_steps=30):
 def long_pass_inner_function(log, n_steps=30):
 
     filtered_log = data.filter_log(
-        log=json.loads(log),
-        type=("LONG_PASS_ATTEMPT", "NEW_POSSESSION"),
+        log,
+        type=("LONG_PASS_ATTEMPT", "NEW_POSSESSION", "OPP_POSSESSION"),
     )
     df = data.parse_log_to_df(filtered_log)
 
@@ -133,8 +133,8 @@ def long_pass_inner_function(log, n_steps=30):
 def handle_inner_function(log, n_steps=10):
 
     filtered_log = data.filter_log(
-        log=json.loads(log),
-        type=("MOVE_WITH_BALL_ATTEMPT", "LOST_POSSESSION"),
+        log,
+        type=("MOVE_WITH_BALL_ATTEMPT", "LOST_POSSESSION", "OPP_POSSESSION"),
     )
     df = data.parse_log_to_df(filtered_log)
 
@@ -156,7 +156,7 @@ def handle_inner_function(log, n_steps=10):
 def position_score_inner_function(log, n_steps=20):
 
     filtered_log = data.filter_log(
-        log=json.loads(log),
+        log,
         type=("ACTIVE_POS_SCORE", "GOAL_SCORED"),
     )
     df = data.parse_log_to_df(filtered_log)
