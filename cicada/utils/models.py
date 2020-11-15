@@ -1,7 +1,6 @@
 import json
 import os
 
-# import joblib
 from functools import partial
 
 import lightgbm as lgb
@@ -13,25 +12,17 @@ from tqdm import tqdm
 from cicada.utils import data
 from cicada.utils import config
 
-FILEPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# INCREMENTAL_DATA = True
-# GAME_WEIGHTING_FACTOR = 0.5
-
-# SHORT_PASS_MODEL_PATH = os.path.join(FILEPATH, "short_pass_model.pkl")
-# LONG_PASS_MODEL_PATH = os.path.join(FILEPATH, "long_pass_model.pkl")
-# HANDLE_MODEL_PATH = os.path.join(FILEPATH, "handle_model.pkl")
-# short_pass_model = joblib.load(SHORT_PASS_MODEL_PATH)
-# long_pass_model = joblib.load(LONG_PASS_MODEL_PATH)
-# handle_model = joblib.load(HANDLE_MODEL_PATH)
-
-# POSITION_MODEL_PATH = os.path.join(FILEPATH, "position_model.txt")
-# position_model = lgb.Booster(model_file=POSITION_MODEL_PATH)
+FILEPATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def make_dataset(inner_function, filename, incremental=config.INCREMENTAL_DATA):
+def make_dataset(
+    inner_function,
+    filename,
+    incremental=config.INCREMENTAL_DATA,
+    max_rows=config.MAX_DATASET_ROWS,
+):
 
-    df_path = os.path.join(FILEPATH, filename)
+    df_path = os.path.join(FILEPATH, "data", filename)
 
     if incremental:
         try:
@@ -66,6 +57,11 @@ def make_dataset(inner_function, filename, incremental=config.INCREMENTAL_DATA):
         dfs = [existing_df] + dfs
 
     new_df = pd.concat(dfs).reset_index(drop=True)
+
+    if len(new_df) > max_rows:
+        print("truncating dataset longer than", max_rows, "rows")
+        new_df = new_df.tail(max_rows)
+
     new_df.to_pickle(df_path)
 
     return new_df
@@ -153,11 +149,11 @@ def handle_inner_function(log, n_steps=10):
     return df
 
 
-def position_score_inner_function(log, n_steps=20):
+def position_score_inner_function(log):
 
     filtered_log = data.filter_log(
         log,
-        type=("ACTIVE_POS_SCORE", "GOAL_SCORED"),
+        type=("ACTIVE_POS_SCORE", "GOAL_SCORED", "OPP_POSSESSION"),
     )
     df = data.parse_log_to_df(filtered_log)
 
@@ -167,9 +163,13 @@ def position_score_inner_function(log, n_steps=20):
 
         goal_steps = df.step[df.type == "GOAL_SCORED"]
         for step in goal_steps:
+            mask = (df.step < step) & (df.step >= (step - 20))
+            df.loc[mask, "reward"] = 1.0
 
-            mask = (df.step < step) & (df.step >= (step - n_steps))
-            df.loc[mask, "reward"] = 1
+        opp_pos_steps = df.step[df.type == "OPP_POSSESSION"]
+        for step in opp_pos_steps:
+            mask = (df.step < step) & (df.step >= (step - 10))
+            df.loc[mask, "reward"] = -0.01
 
         df = df[df.type == "ACTIVE_POS_SCORE"]
 
@@ -217,15 +217,16 @@ lgb_model_specs = {
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
-            "timestep": "eval_data.timestep",
-            "kick_countdown": "eval_data.kick_countdown",
+            # "timestep": "eval_data.timestep",
+            # "kick_countdown": "eval_data.kick_countdown",
         },
         "class": lgb.LGBMClassifier,
         "grid": {
             "n_estimators": list(range(10, 301, 30)),
-            "num_leaves": [10, 30],
+            "num_leaves": [5, 30],
         },
         "scoring": "neg_log_loss",
+        "default_prediction": 0.8,
     },
     "long_pass_success": {
         "filename": "long_pass_model.txt",
@@ -241,15 +242,16 @@ lgb_model_specs = {
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
-            "timestep": "eval_data.timestep",
-            "kick_countdown": "eval_data.kick_countdown",
+            # "timestep": "eval_data.timestep",
+            # "kick_countdown": "eval_data.kick_countdown",
         },
         "class": lgb.LGBMClassifier,
         "grid": {
             "n_estimators": list(range(10, 301, 30)),
-            "num_leaves": [10, 30],
+            "num_leaves": [5, 30],
         },
         "scoring": "neg_log_loss",
+        "default_prediction": 0.8,
     },
     "handle_success": {
         "filename": "handle_model.txt",
@@ -263,14 +265,31 @@ lgb_model_specs = {
             "close_opp_dir_change": "eval_data.close_opp_dir_change",
             "small_cone_angle": "eval_data.small_cone_angle",
             "angle_diff": "eval_data.angle_diff",
-            "timestep": "eval_data.timestep",
+            # "timestep": "eval_data.timestep",
+        },
+        "class": lgb.LGBMClassifier,
+        "grid": {
+            "n_estimators": list(range(50, 551, 100)),
+            "num_leaves": [30],
+        },
+        "scoring": "neg_log_loss",
+        "default_prediction": 0.8,
+    },
+    "shot_success": {
+        "filename": "shot_model.txt",
+        "dataset": make_shot_dataset,
+        "features": {
+            "view_of_net": "eval_data.view_of_net",
+            "distance_to_net": "eval_data.distance_to_net",
+            "distance_to_goalie": "eval_data.dist_to_goalie",
         },
         "class": lgb.LGBMClassifier,
         "grid": {
             "n_estimators": list(range(10, 301, 30)),
-            "num_leaves": [10, 30],
+            "num_leaves": [10],
         },
         "scoring": "neg_log_loss",
+        "default_prediction": 0.1,
     },
 }
 
@@ -299,154 +318,59 @@ def fit_lgb_model(model_spec):
     print("best params:", grid_search.best_params_)
     pred = grid_search.predict_proba(X)[:, 1]
     print("distribution of predictions:")
-    print(pd.Series(pred).describe())
-    filepath = os.path.join(FILEPATH, ms["filename"])
+    print(
+        pd.Series(pred).describe(
+            percentiles=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]
+        )
+    )
+    filepath = os.path.join(FILEPATH, "models", ms["filename"])
     print("saving to", filepath)
     grid_search.best_estimator_.booster_.save_model(filepath)
 
 
 class PlaceholderModel:
-    def predict(*args, **kwargs):
-        return [0.5]
+    def __init__(self, value=0.5):
+        self.value = value
 
-
-def hash_of_text_file(filepath):
-    try:
-        with open(filepath, "r") as file:
-            return hash(file.read())
-    except FileNotFoundError:
-        return 0
+    def predict(self, *args, **kwargs):
+        return [self.value]
 
 
 def load_lgb_models(quiet=True):
 
     global lgb_models
-    global lgb_model_hashes
     lgb_models = dict()
-    lgb_model_hashes = dict()
 
     for name, spec in lgb_model_specs.items():
 
-        filepath = os.path.join(FILEPATH, spec["filename"])
+        filepath = os.path.join(FILEPATH, "models", spec["filename"])
         if os.path.isfile(filepath):
             model = lgb.Booster(model_file=filepath)
             if not quiet:
                 print("model loaded from", filepath)
-            model_hash = hash_of_text_file(filepath)
         else:
             if not quiet:
                 print("model not found, using placeholder instead:", name)
-            model = PlaceholderModel()
-            model_hash = 0
+            model = PlaceholderModel(spec["default_prediction"])
 
         lgb_models[name] = model
-        lgb_model_hashes[name] = model_hash
 
 
-def reload_lgb_models_if_needed(quiet=True):
-    if "lgb_models" not in globals():
-        return load_lgb_models(quiet=quiet)
-    for name, spec in lgb_model_specs.items():
-        filepath = os.path.join(FILEPATH, spec["filename"])
-        if lgb_model_hashes[name] != hash_of_text_file(filepath):
-            return load_lgb_models(quiet=quiet)
+load_lgb_models()
 
 
-reload_lgb_models_if_needed()
+def make_predict_function(name):
+    model_spec = lgb_model_specs[name]
+    feature_names = ", ".join(model_spec["features"].keys())
+    function_string = f"def _predict_func({feature_names}): return lgb_models['{name}'].predict([[{feature_names}]])[0]"
+    exec(function_string)
+    return locals()["_predict_func"]
 
 
-def short_pass_success(
-    pass_error_diff,
-    pos_score_posx,
-    pos_score_dnet,
-    pos_score_dopp,
-    pos_score_kopp,
-    small_cone_angle,
-    pass_distance,
-    opp_dist_to_line,
-    opp_dist_to_active,
-    timestep,
-    kick_countdown,
-):
-    return lgb_models["short_pass_success"].predict(
-        [
-            [
-                pass_error_diff,
-                pos_score_posx,
-                pos_score_dnet,
-                pos_score_dopp,
-                pos_score_kopp,
-                small_cone_angle,
-                pass_distance,
-                opp_dist_to_line,
-                opp_dist_to_active,
-                timestep,
-                kick_countdown,
-            ]
-        ]
-    )[0]
-
-
-def long_pass_success(
-    pass_error_diff,
-    pos_score_posx,
-    pos_score_dnet,
-    pos_score_dopp,
-    pos_score_kopp,
-    small_cone_angle,
-    forward_cone_angle,
-    pass_distance,
-    opp_dist_to_line,
-    opp_dist_to_active,
-    timestep,
-    kick_countdown,
-):
-    return lgb_models["long_pass_success"].predict(
-        [
-            [
-                pass_error_diff,
-                pos_score_posx,
-                pos_score_dnet,
-                pos_score_dopp,
-                pos_score_kopp,
-                small_cone_angle,
-                forward_cone_angle,
-                pass_distance,
-                opp_dist_to_line,
-                opp_dist_to_active,
-                timestep,
-                kick_countdown,
-            ]
-        ]
-    )[0]
-
-
-def handle_success(
-    pos_score_posx,
-    pos_score_dnet,
-    pos_score_view,
-    pos_score_dopp,
-    pos_score_kopp,
-    close_opp_dir_change,
-    small_cone_angle,
-    angle_diff,
-    timestep,
-):
-    return lgb_models["handle_success"].predict(
-        [
-            [
-                pos_score_posx,
-                pos_score_dnet,
-                pos_score_view,
-                pos_score_dopp,
-                pos_score_kopp,
-                close_opp_dir_change,
-                small_cone_angle,
-                angle_diff,
-                timestep,
-            ]
-        ]
-    )[0]
+short_pass_success = make_predict_function("short_pass_success")
+long_pass_success = make_predict_function("long_pass_success")
+handle_success = make_predict_function("handle_success")
+shot_success = make_predict_function("shot_success")
 
 
 def position_score(
@@ -457,28 +381,26 @@ def position_score(
     dopp,
     kopp,
 ):
-    # return position_model.predict([[
-    #     1.0,  # accidentally had constant in X
-    #     posx,
-    #     dnet,
-    #     view,
-    #     dopp,
-    # ]])[0]
     return max(
         min(
-            307.0343597796267
-            + -79.6126832391322 * posx
-            + 3.18168640712528 * abs(posy)
-            + -170.84343408637883 * dnet
-            + 15.225679584757794 * view
-            + 87.82098757983785 * dopp
-            + 0.0 * kopp
-            + -366.6045294401938 * np.log10(posx + 2.0)
-            + 80.09708098058961 * posy ** 2
-            + -8.123204679740764 * dnet ** 2
-            + -6.602709094607595 * view ** 2
-            + -528.3954428038661 * dopp ** 2
-            + 0.0 * kopp ** 2,
+            468.74842421261667
+            + -90.41513287612594 * posx
+            + 4.095688444021861 * posx * (posx > -0.5)
+            + 70.42702891705054 * posx * (posx > 0.0)
+            + 12.642795700464502 * posx * (posx > 0.5)
+            + -890.6776542323154 * np.log10(posx + 2.0)
+            + -14.342713413697245 * abs(posy)
+            + 148.7364449664164 * posy ** 2
+            + -96.22550776273538 * dnet
+            + -87.97648632100884 * dnet ** 2
+            + 17.15915753520119 * view
+            + -6.994788902368123 * view ** 2
+            + 13.657952325903146 * dopp
+            + -2.515510877798804 * dopp * (dopp < 0.05)
+            + 6.136153757388059 * dopp * (dopp < 0.1)
+            + -105.32057391317849 * dopp ** 2
+            + -0.008149365889387297 * kopp
+            + -3.7405569397024063 * np.log10(kopp),
             50.0,
         ),
         0,
@@ -487,22 +409,16 @@ def position_score(
 
 if __name__ == "__main__":
 
-    # # tests:
+    # test prediction functions
+    for name, spec in lgb_model_specs.items():
+        print(name)
+        features = spec["features"].keys()
+        func = make_predict_function(name)
+        pred = func(**{k: 1.0 for k in features})
+        print(pred)
 
-    # short_pass_df = make_short_pass_dataset()
+    print("tests passed")
 
-    # short_pass_features = lgb_model_specs["short_pass_success"]["features"].keys()
-    # short_pass_success(**{k: 1.0 for k in short_pass_features})
-
-    # long_pass_features = lgb_model_specs["long_pass_success"]["features"].keys()
-    # long_pass_success(**{k: 1.0 for k in long_pass_features})
-
-    # handle_features = lgb_model_specs["handle_success"]["features"].keys()
-    # handle_success(**{k: 1.0 for k in handle_features})
-
-    # print("tests passed")
-
-    # train models on existing data
-
+    print("training models on existing data")
     for name, spec in lgb_model_specs.items():
         fit_lgb_model(spec)

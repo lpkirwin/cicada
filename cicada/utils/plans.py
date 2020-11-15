@@ -1,3 +1,4 @@
+from datetime import time
 import numpy as np
 from kaggle_environments.envs.football.helpers import Action, GameMode
 
@@ -53,6 +54,7 @@ class Plan:
             dopp=dopp,
             kopp=kopp,
         )
+        # pos_score = pos_score * 0.15 + 25.0 * 0.85
 
         self.pos_score_data = {
             "posx": posx,
@@ -64,6 +66,7 @@ class Plan:
             "score": pos_score,
         }
 
+        # return 10.0
         return pos_score
 
     def evaluate(self):
@@ -89,14 +92,16 @@ class Plan:
             "action_direction": getattr(self, "action_direction", None),
             "pass_error": getattr(self, "pass_error", -999.0),
             "pass_error_diff": getattr(self, "pass_error_diff", -999.0),
+            "shoot_value": getattr(self, "shoot_value", 0.0),
         }
 
 
 class Move(Plan):
     name = "MOVE"
 
-    def __init__(self, pos, timestep=0):
+    def __init__(self, pos, action_direction=None, timestep=0):
         self.pos = pos
+        self.action_direction = action_direction
         super().__init__(timestep=timestep)
 
     def evaluate(self):
@@ -107,7 +112,9 @@ class Move(Plan):
 
     def get_action(self):
 
-        desired_act = nav.get_action_direction(self.state.active_pos, self.pos)
+        desired_act = self.action_direction or nav.get_action_direction(
+            self.state.active_pos, self.pos
+        )
         current_act = nav.get_action_direction(nav.origin, self.state.active_dir)
 
         # make sure we're heading in the right direction
@@ -176,7 +183,7 @@ class MoveWithBall(Plan):
             close_opp_dir_change=close_opp_dir_change,
             small_cone_angle=small_cone_angle,
             angle_diff=angle_diff,
-            timestep=self.timestep,
+            # timestep=self.timestep,
         )
         self.value *= prb_success ** config.RISK_AVERSION
 
@@ -199,7 +206,7 @@ class MoveWithBall(Plan):
         return (
             self.state.active_pos
             + self.state.active_dir * 3
-            + desired_dir * 0.01 * self.timestep
+            + desired_dir * 0.009 * self.timestep
         )
 
     def get_action(self):
@@ -216,7 +223,7 @@ class MoveWithBall(Plan):
             }
         )
 
-        subplan = Move(self.pos)
+        subplan = Move(self.pos, action_direction=self.action_direction)
         return subplan.get_action()
 
 
@@ -243,7 +250,11 @@ class ShortPass(Plan):
 
         self.value = self.position_score()
 
-        active_pos = self.state.team_pred[self.state.active_idx, self.timestep]
+        shoot_plan = Shoot(timestep=self.timestep, player=self.player)
+        self.shoot_value = shoot_plan.value * 0.2
+        self.value += self.shoot_value
+
+        active_pos = self.state.active_pred[self.timestep]
         player_pos = self.state.team_pred[self.player, self.timestep]
 
         small_cone_angle = nav.min_opp_angle(
@@ -270,10 +281,11 @@ class ShortPass(Plan):
             pass_distance=pass_distance,
             opp_dist_to_line=opp_dist_to_line,
             opp_dist_to_active=opp_dist_to_active,
-            timestep=self.timestep,
-            kick_countdown=self.state.player_kicked_countdown_timer,
+            # timestep=self.timestep,
+            # kick_countdown=self.state.player_kicked_countdown_timer,
         )
-        self.value *= prb_success ** config.RISK_AVERSION
+        self.value *= (prb_success + 0.04) ** config.RISK_AVERSION
+        # self.value *= (0.78 + prb_success / 100.0 * 7)
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
@@ -340,12 +352,16 @@ class LongPass(Plan):
 
         self.value = self.position_score()
 
-        active_pos = self.state.team_pred[self.state.active_idx, self.timestep]
+        shoot_plan = Shoot(timestep=self.timestep, player=self.player)
+        self.shoot_value = shoot_plan.value * 0.2
+        self.value += self.shoot_value
+
+        active_pos = self.state.active_pred[self.timestep]
         player_pos = self.state.team_pred[self.player, self.timestep]
 
         small_cone_angle = nav.min_opp_angle(
             state=self.state,
-            pos_a=self.state.team_pred[self.state.active_idx, self.timestep],
+            pos_a=self.state.active_pred[self.timestep],
             pos_b=self.pos,
             timestep=self.timestep,
         )
@@ -374,10 +390,11 @@ class LongPass(Plan):
             pass_distance=pass_distance,
             opp_dist_to_line=opp_dist_to_line,
             opp_dist_to_active=opp_dist_to_active,
-            timestep=self.timestep,
-            kick_countdown=self.state.player_kicked_countdown_timer,
+            # timestep=self.timestep,
+            # kick_countdown=self.state.player_kicked_countdown_timer,
         )
-        self.value *= prb_success ** config.RISK_AVERSION
+        self.value *= (prb_success + 0.08) ** config.RISK_AVERSION
+        # self.value *= (0.77 + prb_success / 100.0 * 7)
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
@@ -413,7 +430,7 @@ class LongPass(Plan):
                 "eval_data": self.eval_data,
             }
         )
-        
+
         if self.follow_through:
             if self.action_direction not in self.state.sticky_actions:
                 return self.action_direction
@@ -434,9 +451,11 @@ class HighPass(Plan):
 
     def evaluate(self):
         self.value = 0.0
-        if self.state.active_pos[0] > 0.85:
+        if self.state.active_pos[0] > 0.80:
             if abs(self.state.active_pos[1]) > 0.15:
                 self.value = 52.0
+        if self.state.active_pos[0] < -0.65:
+            self.value = 10.0
 
     def get_position(self):
         return nav.opp_goal
@@ -480,24 +499,41 @@ class GoToBall(Plan):
 class Shoot(Plan):
     name = "SHOOT"
 
-    def __init__(self, timestep):
+    def __init__(self, timestep, player=None):
+        self.player = player
         self.follow_through = False
         super().__init__(timestep=timestep)
 
     def evaluate(self):
-        pos = self.state.team_pred[self.state.active_idx, self.timestep]
+
+        if self.player is None:
+            self.player = self.state.active_idx
+
+        pos = self.state.team_pred[self.player, self.timestep]
         view_of_net = calc.get_view_of_net(self.state, pos, timestep=self.timestep)
         distance_to_net = calc.get_distance_to_net(pos)
-        self.value = (
-            10.0
-            + view_of_net * 100.0 * (distance_to_net < 0.4)
-            + 10.0 * (distance_to_net < 0.2)
-        )
+
+        if config.USE_HARDCODED_SHOT_VALUE:
+            prb_success = -1.0
+            self.value = (
+                10.0 * (pos[0] > 0.0)
+                + view_of_net * 100.0 * (distance_to_net < 0.4)
+                + 10.0 * (distance_to_net < 0.2)
+            )
+        else:
+            self.value = 400.0 if distance_to_net < 0.35 else 0.0  # TODO: tune this
+            prb_success = models.shot_success(
+                view_of_net=view_of_net,
+                distance_to_net=distance_to_net,
+                distance_to_goalie=np.nan,
+            )
+            self.value *= prb_success ** config.RISK_AVERSION
+
         self.eval_data = {
-            "type": "SHOT_EVALUATION",
             "pos": list(pos.round(4)),
             "view_of_net": view_of_net,
             "distance_to_net": distance_to_net,
+            "prb_success": prb_success,
         }
         # temporary diagnostic logging
         self.state.write_to_log(self.eval_data)
@@ -616,17 +652,37 @@ class Breakaway(Plan):
         if self.follow_through:
             if self.state.is_sprinting:
                 return Action.ReleaseSprint
-            return Action.Idle
+            else:
+                return Action.Idle
 
-        dist_to_goalie = nav.dist_1d(self.state.active_pos, self.state.opp_pos[0])
-        if dist_to_goalie <= 0.28:
-            self.state.write_to_log(
-                {
-                    "type": "SHOT_ATTEMPT",
-                    "eval_data": {"dist_to_goalie": dist_to_goalie},
-                }
+        active_pos = self.state.active_pred[6]
+        goalie_pos = self.state.opp_pred[0, 6]
+        dist_to_goalie = nav.dist_1d(active_pos, goalie_pos)
+        if dist_to_goalie <= 0.18:
+            desired_act = (
+                Action.TopRight if self.state.active_pos[1] > 0 else Action.BottomRight
             )
-            return Action.Shot
+            if desired_act not in self.state.sticky_actions:
+                return desired_act
+            else:
+                # add some extra metadata from training regular shot action
+                pos = self.state.active_pred[self.timestep]
+                view_of_net = calc.get_view_of_net(
+                    self.state, pos, timestep=self.timestep
+                )
+                distance_to_net = calc.get_distance_to_net(pos)
+                self.state.write_to_log(
+                    {
+                        "type": "SHOT_ATTEMPT",
+                        "eval_data": {
+                            "dist_to_goalie": dist_to_goalie,
+                            "pos": pos,
+                            "view_of_net": view_of_net,
+                            "distance_to_net": distance_to_net,
+                        },
+                    }
+                )
+                return Action.Shot
 
         subplan = Move(self.pos)
         return subplan.get_action()
@@ -649,7 +705,7 @@ class Kickoff(Plan):
                     self.value = 200.0
 
     def get_position(self):
-        return nav.opp_goal
+        return np.array([-0.5, 0.0])
 
     def get_action(self):
         if self.follow_through:

@@ -49,10 +49,11 @@ def print_diagnostics(state, log_step):
         # active = " (ACTIVE)" if rec["active"] else ""
         # array[n_plans][1] = f"{rec['plan']}{active} / {rec['value']} / {rec['pos']}"
         text = (
-            str(rec["plan"]).ljust(16)
+            str(rec["plan"]).ljust(15)
             + "{:.2f}".format(rec["value"]).rjust(7)
+            + "{:.2f}".format(rec["pos_score_data"].get("score", 0.0)).rjust(7)
             + "{:.2%}".format(rec["eval_data"].get("prb_success", 0.0)).rjust(8)
-            + str(rec["pos"].round(3)).rjust(18)
+            + str(rec["pos"].round(2)).rjust(15)
         )
         array[n_plans][1] = text
         n_plans += 1
@@ -110,7 +111,7 @@ def get_traces(state, log_step):
     active_intercepts += [np.nan] * (6 - len(active_intercepts))
     active_intercepts = active_intercepts[:6]
 
-    n_targets_to_show = 10
+    n_targets_to_show = 14
     target_pos = np.ones(shape=(n_targets_to_show, 2)) * -99
     target_tooltip = Tooltip()
     for i, rec in enumerate(data.filter_log_step(log_step, type="PLAN")):
@@ -123,6 +124,7 @@ def get_traces(state, log_step):
             pass_error_diff=round(rec["pass_error_diff"], 4),
             pos_score=round(rec["pos_score_data"]["score"], 4),
             prb_success=round(rec["eval_data"].get("prb_success", 0.0), 4),
+            shoot_value=round(rec["shoot_value"], 4),
             value=round(rec["value"], 4),
         )
         if i == n_targets_to_show - 1:

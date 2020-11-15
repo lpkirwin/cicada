@@ -16,9 +16,9 @@ from . import calculation as calc
 from . import config
 from . import navigation as nav
 
-FILEPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_PATH = os.path.join(FILEPATH, "log.jsonl")
-SCORE_PATH = os.path.join(FILEPATH, "score.csv")
+FILEPATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LOG_PATH = os.path.join(FILEPATH, "data", "log.jsonl")
+SCORE_PATH = os.path.join(FILEPATH, "data", "score.csv")
 
 
 def clean_observation(obs):
@@ -100,6 +100,8 @@ class State:
 
         if obs["score"][0] > self.score[0]:
             self.write_to_log({"type": "GOAL_SCORED"})
+        if obs["score"][1] > self.score[1]:
+            self.write_to_log({"type": "OPP_GOAL_SCORED"})
         self.score = obs["score"]
 
         # if we don't have possession, but we had it last turn:
@@ -107,7 +109,7 @@ class State:
             if not self.player_kicked_countdown_timer > 0:
                 self.write_to_log({"type": "LOST_POSSESSION"})
 
-        if (obs["active"] != self.active_idx) or (
+        if (obs["active"] != self.active_idx) or (  # TODO: leads to false positives
             (obs["ball_owned_team"] != 0) and self.left_has_ball
         ):
             if self.player_kicked_countdown_timer > 0:
@@ -222,6 +224,8 @@ class State:
                 self.team_pred[p, t] = pos_
                 pos_ += dir_  # update player based on current direction
 
+        self.active_pred = self.team_pred[self.active_idx]
+
         # opponent player predictions
         self.opp_pred = np.zeros(shape=(self.opp_n_players, self.n_step_pred + 1, 2))
         for o in range(self.opp_n_players):
@@ -251,7 +255,7 @@ class State:
         for t in range(1, self.n_step_pred + 1):
             for o in range(self.opp_n_players):
                 opp_pos = self.opp_pred[o, t]
-                active_pos = self.team_pred[self.active_idx, t]
+                active_pos = self.active_pred[t]
                 if nav.dist_1d(opp_pos, active_pos) < 0.02:
                     self.will_collide_with_opp[t] = True
         try:
@@ -265,7 +269,7 @@ class State:
             self.will_receive_ball[0] = True
         for t in range(1, self.n_step_pred + 1):
             ball_pos = self.ball_pred[t, :2]
-            active_pos = self.team_pred[self.active_idx, t]
+            active_pos = self.active_pred[t]
             if nav.dist_1d(ball_pos, active_pos) < 0.02:
                 if self.ball_pred[t, 2] < 1.2:
                     self.will_receive_ball[t] = True
@@ -274,7 +278,8 @@ class State:
         except ValueError:
             self.will_receive_ball_at = np.nan
 
-        # can active player receive ball within n steps moving at x per step
+        # can active player receive ball within n steps moving at x per step, and 
+        # I check that the below is below a reasonable height
         self.can_receive_ball = np.array([False] * (self.n_step_pred + 1))
         for t in range(1, self.n_step_pred + 1):
             ball_pos = self.ball_pred[t, :2]
@@ -338,7 +343,7 @@ def filter_log_step(log_step, **kwargs):
             if not isinstance(values, (list, tuple)):
                 values = [values]
             for v in values:
-                if rec[k] == v:
+                if rec.get(k) == v:
                     out.append(deepcopy(rec))
     return out
 
@@ -352,6 +357,16 @@ def filter_log(log, **kwargs):
         if len(filtered_step):
             out.append(filtered_step)
     return out
+
+
+def count_record_types(log):
+    counts = dict()
+    for log_step in log:
+        for rec in log_step:
+            rec_type = rec.get("type")
+            current_count = counts.get(rec_type, 0)
+            counts[rec_type] = current_count + 1
+    return counts
 
 
 def parse_log_to_df(log, **kwargs):

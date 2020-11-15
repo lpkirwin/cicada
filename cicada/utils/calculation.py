@@ -51,8 +51,8 @@ def get_min_opp_distance(state, pos, timestep=0):
 
 
 def get_opp_kernel_density(state, pos, timestep=0):
-    opp_dists = nav.dist_2d(pos, state.opp_pred[:, timestep])
-    return (1 / opp_dists ** 2).sum()
+    opp_dists = nav.dist_2d(pos, state.opp_pred[:, timestep]).clip(min=0.01)
+    return (1 / opp_dists).sum()
 
 
 def get_min_team_distance(state, pos, timestep=0):
@@ -77,5 +77,5 @@ def opp_density_to_line(state, pos_a, pos_b, timestep=0):
             nav.dist_from_point_to_line_segment(opp_pos, pos_a, pos_b)
             for opp_pos in state.opp_pred[:, timestep]
         ]
-    )
-    return (1 / opp_dists ** 2).sum()
+    ).clip(min=0.01)
+    return (1 / opp_dists).sum()

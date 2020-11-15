@@ -7,10 +7,10 @@ from cicada import agent
 from cicada.utils import data, models
 
 INIT_NEW_FILES = False
-N_GAMES_PER_ROUND = 100
-N_ROUNDS = 11
+N_GAMES_PER_ROUND = 200
+N_ROUNDS = 2
 N_PROCESSES = 5
-NOISE_SD = 0.5
+NOISE_SD = 0.1
 
 
 def simulate_one_game(game_num):
@@ -26,28 +26,48 @@ def simulate_one_game(game_num):
             "save_video": False,
             "scenario_name": "11_vs_11_kaggle",
             # "scenario_name": "academy_run_to_score_with_keeper",
-            # "episodeSteps": 500,
+            # "episodeSteps": 200,
         },
     )
     env.reset()
-    env.run([action, "cicada/submission2.py"])
-
-    score = env.state[0]["observation"]["players_raw"][0]["score"]
-    data.add_to_score_file(score)
-    print(f"game_num: {game_num}, score: {score}")
+    env.run([action, "cicada/simple_rules_based_agent.py"])
 
     log_types_to_keep = [
         "SHOT_ATTEMPT",
         "GOAL_SCORED",
+        "OPP_GOAL_SCORED",
         "MOVE_WITH_BALL_ATTEMPT",
         "SHORT_PASS_ATTEMPT",
         "LONG_PASS_ATTEMPT",
         "LOST_POSSESSION",
         "NEW_POSSESSION",
+        "OPP_POSSESSION",
         "ACTIVE_POS_SCORE",
+        "KICK_WITH_NO_ATTEMPT_EVENT",
     ]
     filtered_log = data.filter_log(agent_obj.state.log, type=log_types_to_keep)
     data.add_to_log_file(filtered_log)
+
+    record_type_counts = data.count_record_types(filtered_log)
+
+    score = env.state[0]["observation"]["players_raw"][0]["score"]
+    data.add_to_score_file(score)
+
+    to_print = f"game_num: {str(game_num):>4}, score: {str(score):>8}, "
+    rec_count_strings = list()
+    for rec_type in [
+        "SHOT_ATTEMPT",
+        "MOVE_WITH_BALL_ATTEMPT",
+        "SHORT_PASS_ATTEMPT",
+        "LONG_PASS_ATTEMPT",
+        "LOST_POSSESSION",
+        "KICK_WITH_NO_ATTEMPT_EVENT",
+    ]:
+        rec_count_strings.append(
+            f"{rec_type}: {str(record_type_counts.get(rec_type, 0)):>4}"
+        )
+    to_print += ", ".join(rec_count_strings)
+    print(to_print)
 
 
 if __name__ == "__main__":
@@ -83,6 +103,6 @@ if __name__ == "__main__":
 
         for name, spec in models.lgb_model_specs.items():
             models.fit_lgb_model(spec)
-        agent.plans.models.reload_lgb_models_if_needed(quiet=False)
+        agent.plans.models.load_lgb_models(quiet=False)
 
     print("done all rounds")

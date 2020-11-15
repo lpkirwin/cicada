@@ -56,7 +56,7 @@ class Agent:
             extra_timestep = state.will_receive_ball_at
 
             potential_plans.append(plans.Breakaway())
-            # potential_plans.append(plans.HighPass())
+            potential_plans.append(plans.HighPass())
             potential_plans.append(
                 plans.Shoot(timestep=config.SHOOT_TIMESTEP + extra_timestep)
             )
@@ -69,7 +69,7 @@ class Agent:
                 curr_act, curr_err, curr_diff = players_to_pass_to.get(
                     player, [None, 999.9, 0.0]
                 )
-                if error < 20.0:  # if error worse than this, targeting likely poor
+                if error < 25.0:  # if error worse than this, targeting likely poor
                     if error_diff > curr_diff:  # replace
                         players_to_pass_to[player] = [action, error, error_diff]
 
@@ -162,9 +162,9 @@ if __name__ == "__main__":
         },
     )
 
-    env.run([agent.action_wrapper, "cicada/submission2.py"])
+    env.run([agent.action_wrapper, "cicada/simple_rules_based_agent.py"])
 
-    trainer = env.train([None, "cicada/submission2.py"])
+    trainer = env.train([None, "cicada/simple_rules_based_agent.py"])
     obs = trainer.reset()
     while not env.done:
         action = agent.action_wrapper(obs)
