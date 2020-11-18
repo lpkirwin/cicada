@@ -9,7 +9,7 @@ def get_view_of_net(state, pos, timestep=0, log_intercepts=False):
 
     for opp_pos in state.opp_pred[:, timestep, :]:
 
-        if opp_pos[0] < pos[0]:
+        if opp_pos[0] <= pos[0]:
             continue
 
         opp_a = np.array([opp_pos[0], opp_pos[1] + 0.015])

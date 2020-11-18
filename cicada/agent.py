@@ -147,6 +147,14 @@ class Agent:
             state.player_kicked = state.active_idx
             state.player_kicked_countdown_timer = config.KICK_COUNTDOWN_TIMER_START
             state.follow_through_plan = type(plan)
+            if not state.left_has_ball:
+                if not np.isnan(state.will_receive_ball_at):
+                    state.write_to_log(
+                        {
+                            "type": "ONE_TIME_KICK_ATTEMPT",
+                            "will_receive_ball_at": state.will_receive_ball_at,
+                        }
+                    )
 
         for plan in potential_plans:
             plan.end_of_turn_update()

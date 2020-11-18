@@ -4,9 +4,10 @@ import os
 from functools import partial
 
 import lightgbm as lgb
+from lightgbm.sklearn import LGBMClassifier
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GridSearchCV
+# from sklearn.model_selection import GridSearchCV
 from tqdm import tqdm
 
 from cicada.utils import data
@@ -87,10 +88,16 @@ def shot_inner_function(log, n_steps=30):
     return df
 
 
-def short_pass_inner_function(log, n_steps=30):
+def short_pass_inner_function(log, n_steps=60):
 
     filtered_log = data.filter_log(
-        log, type=("SHORT_PASS_ATTEMPT", "NEW_POSSESSION", "OPP_POSSESSION")
+        log,
+        type=(
+            "SHORT_PASS_ATTEMPT",
+            "NEW_POSSESSION",
+            "OPP_POSSESSION",
+            "KICK_RELEASE",
+        ),
     )
     df = data.parse_log_to_df(filtered_log)
 
@@ -98,7 +105,8 @@ def short_pass_inner_function(log, n_steps=30):
 
         df["target"] = (
             (df.type == "SHORT_PASS_ATTEMPT")
-            & (df.type.shift(-1) == "NEW_POSSESSION")
+            # & ((df.type.shift(-1) == "NEW_POSSESSION"))
+            & (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
             & (df.step.shift(-1) - df.step <= n_steps)
         ).astype(int)
         df = df[df.type == "SHORT_PASS_ATTEMPT"]
@@ -106,11 +114,16 @@ def short_pass_inner_function(log, n_steps=30):
     return df
 
 
-def long_pass_inner_function(log, n_steps=30):
+def long_pass_inner_function(log, n_steps=60):
 
     filtered_log = data.filter_log(
         log,
-        type=("LONG_PASS_ATTEMPT", "NEW_POSSESSION", "OPP_POSSESSION"),
+        type=(
+            "LONG_PASS_ATTEMPT",
+            "NEW_POSSESSION",
+            "OPP_POSSESSION",
+            "KICK_RELEASE",
+        ),
     )
     df = data.parse_log_to_df(filtered_log)
 
@@ -118,7 +131,8 @@ def long_pass_inner_function(log, n_steps=30):
 
         df["target"] = (
             (df.type == "LONG_PASS_ATTEMPT")
-            & (df.type.shift(-1) == "NEW_POSSESSION")
+            # & (df.type.shift(-1) == "NEW_POSSESSION")
+            & (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
             & (df.step.shift(-1) - df.step <= n_steps)
         ).astype(int)
         df = df[df.type == "LONG_PASS_ATTEMPT"]
@@ -209,6 +223,7 @@ lgb_model_specs = {
     "short_pass_success": {
         "filename": "short_pass_model.txt",
         "dataset": make_short_pass_dataset,
+        "validation_size": 10_000,
         "features": {
             "pass_error_diff": "eval_data.pass_error_diff",
             "pos_score_posx": "pos_score_data.posx",
@@ -225,8 +240,7 @@ lgb_model_specs = {
             "angle_to_sticky": "eval_data.angle_to_sticky",
             "active_vel": "eval_data.active_vel",
             "player_vel": "eval_data.player_vel",
-            # "timestep": "eval_data.timestep",
-            # "kick_countdown": "eval_data.kick_countdown",
+            "one_time_kick": "one_time_kick",
         },
         "monotone_constraints": {
             "pos_score_dopp": 1,
@@ -237,16 +251,12 @@ lgb_model_specs = {
             "angle_diff": 1,
         },
         "class": lgb.LGBMClassifier,
-        "grid": {
-            "n_estimators": list(range(10, 301, 30)),
-            "num_leaves": [5, 30],
-        },
-        "scoring": "neg_log_loss",
         "default_prediction": 0.8,
     },
     "long_pass_success": {
         "filename": "long_pass_model.txt",
         "dataset": make_long_pass_dataset,
+        "validation_size": 10_000,
         "features": {
             "pass_error_diff": "eval_data.pass_error_diff",
             "pos_score_posx": "pos_score_data.posx",
@@ -264,8 +274,7 @@ lgb_model_specs = {
             "angle_to_sticky": "eval_data.angle_to_sticky",
             "active_vel": "eval_data.active_vel",
             "player_vel": "eval_data.player_vel",
-            # "timestep": "eval_data.timestep",
-            # "kick_countdown": "eval_data.kick_countdown",
+            "one_time_kick": "one_time_kick",
         },
         "monotone_constraints": {
             "pos_score_dopp": 1,
@@ -277,16 +286,12 @@ lgb_model_specs = {
             "angle_diff": 1,
         },
         "class": lgb.LGBMClassifier,
-        "grid": {
-            "n_estimators": list(range(10, 301, 30)),
-            "num_leaves": [5, 30],
-        },
-        "scoring": "neg_log_loss",
         "default_prediction": 0.8,
     },
     "handle_success": {
         "filename": "handle_model.txt",
         "dataset": make_handle_dataset,
+        "validation_size": 50_000,
         "features": {
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
@@ -299,7 +304,6 @@ lgb_model_specs = {
             "opp_dist_to_active_now": "eval_data.opp_dist_to_active_now",
             "angle_diff": "eval_data.angle_diff",
             "angle_to_sticky": "eval_data.angle_to_sticky",
-            # "timestep": "eval_data.timestep",
         },
         "monotone_constraints": {
             "pos_score_dopp": 1,
@@ -312,73 +316,70 @@ lgb_model_specs = {
             "angle_diff": 1,
         },
         "class": lgb.LGBMClassifier,
-        "grid": {
-            "n_estimators": list(range(400, 601, 50)),
-            "num_leaves": [30],
-        },
-        "scoring": "neg_log_loss",
         "default_prediction": 0.8,
     },
     "shot_success": {
         "filename": "shot_model.txt",
         "dataset": make_shot_dataset,
+        "validation_size": 5_000,
         "features": {
             "view_of_net": "eval_data.view_of_net",
             "distance_to_net": "eval_data.distance_to_net",
             "distance_to_goalie": "eval_data.dist_to_goalie",
         },
-        "monotone_constraints": {},
+        "monotone_constraints": {"view_of_net": 1},
         "class": lgb.LGBMClassifier,
-        "grid": {
-            "n_estimators": list(range(10, 301, 30)),
-            "num_leaves": [10],
-        },
-        "scoring": "neg_log_loss",
         "default_prediction": 0.1,
     },
 }
 
 
-def fit_lgb_model(model_spec):
+def fit_lgb_model(model_spec, early_stopping_rounds=10):
     ms = model_spec
     print("loading data using", ms["filename"])
     df = ms["dataset"]()
+    print("converting all feature columns to float32")
+    for col in ms["features"].values():
+        df[col] = df[col].astype("float32")
     print(df.describe().T)
     monotone_constraints = [
-        ms["monotone_constraints"].get(col, 0) for col in ms["features"].values()
+        ms["monotone_constraints"].get(col, 0) for col in ms["features"].keys()
     ]
-    grid_search = GridSearchCV(
-        estimator=ms["class"](
-            monotone_constraints=monotone_constraints,
-            monotone_constraints_method="advanced",
-        ),
-        param_grid=ms["grid"],
-        scoring=ms["scoring"],
-        verbose=1,
-        n_jobs=5,
+    print("monotone constraints:", monotone_constraints)
+    model = LGBMClassifier(
+        n_estimators=2_000,
+        monotone_constraints=monotone_constraints,
     )
     X = df[ms["features"].values()]
     y = df["target"]
     n_games = df["game_id"].max() + 1
     game_pct = (df["game_id"] + 1) / n_games
-    weights = (
-        config.GAME_WEIGHTING_FACTOR + (1 - config.GAME_WEIGHTING_FACTOR) * game_pct
+    w = config.GAME_WEIGHTING_FACTOR + (1 - config.GAME_WEIGHTING_FACTOR) * game_pct
+    eval_size = ms["validation_size"]
+    X_tr, X_te = X.iloc[:-eval_size], X.iloc[-eval_size:]
+    y_tr, y_te = y.iloc[:-eval_size], y.iloc[-eval_size:]
+    w_tr, w_te = w.iloc[:-eval_size], w.iloc[-eval_size:]
+    eval_set = [(X_te.values, y_te.values)]
+    model.fit(
+        X_tr,
+        y_tr,
+        sample_weight=w_tr,
+        eval_set=eval_set,
+        eval_sample_weight=[w_te],
+        early_stopping_rounds=early_stopping_rounds,
+        verbose=early_stopping_rounds,
     )
-    print("fitting", ms["filename"])
-    grid_search.fit(X, y, sample_weight=weights)
-    print("best params:", grid_search.best_params_)
-    pred = grid_search.predict_proba(X)[:, 1]
+    print("refitting model with full dataset")
+    model.set_params(n_estimators=model.best_iteration_)
+    model.fit(X, y, sample_weight=w)
+    pred = pd.Series(model.predict_proba(X)[:, 1])
     print("distribution of predictions:")
-    print(
-        pd.Series(pred).describe(
-            percentiles=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]
-        )
-    )
-    model = grid_search.best_estimator_.booster_
+    print(pred.describe(percentiles=[0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]))
     feature_importances = [
         (feature, importance)
         for feature, importance in zip(
-            model.feature_name(), model.feature_importance(importance_type="gain")
+            model.booster_.feature_name(),
+            model.booster_.feature_importance(importance_type="gain"),
         )
     ]
     print("feature importance (by gain):")
@@ -386,7 +387,7 @@ def fit_lgb_model(model_spec):
         print(f"    {feature}: {importance}")
     filepath = os.path.join(FILEPATH, "models", ms["filename"])
     print("saving to", filepath)
-    grid_search.best_estimator_.booster_.save_model(filepath)
+    model.booster_.save_model(filepath)
 
 
 class PlaceholderModel:
@@ -500,18 +501,18 @@ def position_score(
 
 if __name__ == "__main__":
 
-    # # test prediction functions
-    # for name, spec in lgb_model_specs.items():
-    #     print(name)
-    #     features = spec["features"].keys()
-    #     func = make_predict_function(name)
-    #     pred = func(**{k: 1.0 for k in features})
-    #     print(pred)
+    # test prediction functions
+    for name, spec in lgb_model_specs.items():
+        print(name)
+        features = spec["features"].keys()
+        func = make_predict_function(name)
+        pred = func(**{k: 1.0 for k in features})
+        print(pred)
 
-    # print("tests passed")
+    print("tests passed ✅")
 
     print("training models on existing data")
     for name, spec in lgb_model_specs.items():
-        if "hand" not in name:
-            continue
+        # if "pass" not in name:
+        #     continue
         fit_lgb_model(spec)

@@ -1,4 +1,4 @@
-from datetime import time
+# from datetime import time
 import numpy as np
 from kaggle_environments.envs.football.helpers import Action, GameMode
 
@@ -273,7 +273,7 @@ class ShortPass(Plan):
 
         current_dir = self.state.active_dir
         sticky_dir = nav.action_to_vector_map[self.action_direction]
-        desired_dir = (self.pos - self.state.active_pos) / self.timestep
+        desired_dir = (self.pos - self.state.active_pos) / (self.timestep + 1)
 
         small_cone_angle = nav.min_opp_angle(
             state=self.state,
@@ -297,6 +297,8 @@ class ShortPass(Plan):
         angle_diff = nav.angle_diff(nav.angle(current_dir), nav.angle(desired_dir))
         angle_to_sticky = nav.angle_diff(nav.angle(sticky_dir), nav.angle(desired_dir))
 
+        one_time_kick = True if self.state.will_receive_ball_at >= 3 else False
+
         prb_success = models.short_pass_success(
             pass_error_diff=self.pass_error_diff,
             pos_score_posx=self.pos_score_data["posx"],
@@ -313,11 +315,9 @@ class ShortPass(Plan):
             angle_to_sticky=angle_to_sticky,
             active_vel=self.state.active_vel,
             player_vel=self.state.team_vel[self.player],
-            # timestep=self.timestep,
-            # kick_countdown=self.state.player_kicked_countdown_timer,
+            one_time_kick=one_time_kick,
         )
         self.value *= prb_success ** config.RISK_AVERSION
-        # self.value *= (0.78 + prb_success / 100.0 * 7)
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
@@ -339,6 +339,7 @@ class ShortPass(Plan):
             "angle_to_sticky": angle_to_sticky,
             "active_vel": self.state.active_vel,
             "player_vel": self.state.team_vel[self.player],
+            "one_time_kick": one_time_kick,
             "prb_success": prb_success,
         }
 
@@ -400,7 +401,7 @@ class LongPass(Plan):
 
         current_dir = self.state.active_dir
         sticky_dir = nav.action_to_vector_map[self.action_direction]
-        desired_dir = (self.pos - self.state.active_pos) / self.timestep
+        desired_dir = (self.pos - self.state.active_pos) / (self.timestep + 1)
 
         small_cone_angle = nav.min_opp_angle(
             state=self.state,
@@ -430,6 +431,8 @@ class LongPass(Plan):
         angle_diff = nav.angle_diff(nav.angle(current_dir), nav.angle(desired_dir))
         angle_to_sticky = nav.angle_diff(nav.angle(sticky_dir), nav.angle(desired_dir))
 
+        one_time_kick = True if self.state.will_receive_ball_at >= 3 else False
+
         prb_success = models.long_pass_success(
             pass_error_diff=self.pass_error_diff,
             pos_score_posx=self.pos_score_data["posx"],
@@ -447,11 +450,9 @@ class LongPass(Plan):
             angle_to_sticky=angle_to_sticky,
             active_vel=self.state.active_vel,
             player_vel=self.state.team_vel[self.player],
-            # timestep=self.timestep,
-            # kick_countdown=self.state.player_kicked_countdown_timer,
+            one_time_kick=one_time_kick,
         )
         self.value *= prb_success ** config.RISK_AVERSION
-        # self.value *= (0.77 + prb_success / 100.0 * 7)
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
@@ -474,6 +475,7 @@ class LongPass(Plan):
             "angle_to_sticky": angle_to_sticky,
             "active_vel": self.state.active_vel,
             "player_vel": self.state.team_vel[self.player],
+            "one_time_kick": one_time_kick,
             "prb_success": prb_success,
         }
 
@@ -514,8 +516,13 @@ class HighPass(Plan):
 
     def evaluate(self):
         self.value = 0.0
+        # tall skinny rectangle by opp goal
+        if self.state.active_pos[0] > 0.90:
+            if abs(self.state.active_pos[1]) > 0.1:
+                self.value = 52.0
+        # shorter wider rectangle
         if self.state.active_pos[0] > 0.80:
-            if abs(self.state.active_pos[1]) > 0.15:
+            if abs(self.state.active_pos[1]) > 0.2:
                 self.value = 52.0
         if self.state.active_pos[0] < -0.65:
             self.value = 10.0
@@ -598,8 +605,6 @@ class Shoot(Plan):
             "distance_to_net": distance_to_net,
             "prb_success": prb_success,
         }
-        # temporary diagnostic logging
-        self.state.write_to_log(self.eval_data)
 
     def get_position(self):
         return nav.opp_goal

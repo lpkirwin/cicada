@@ -1,3 +1,5 @@
+import textwrap
+
 import plotly.graph_objects as go
 import numpy as np
 
@@ -38,10 +40,15 @@ def print_diagnostics(state, log_step):
     array[13][0] = f"will collide with opp at: {eot_rec['will_collide_with_opp_at']}"
     array[14][0] = f"elapsed time: {round(eot_rec['elapsed_time'], 6)}"
 
-    shot_eval = data.filter_log_step(log_step, type="SHOT_EVALUATION")
-    if len(shot_eval):
-        array[15][0] = f"shot view of net: {round(shot_eval[0]['view_of_net'], 4)}"
-        array[16][0] = f"shot dist to net: {round(shot_eval[0]['distance_to_net'], 4)}"
+    rec_counts = data.count_record_types([log_step])
+    rec_count_string = ", ".join([f"{k}: {v}" for k, v in rec_counts.items()])
+    rec_count_lines = textwrap.wrap(rec_count_string, col_width)
+    for i, line in enumerate(rec_count_lines):
+        row_idx = 15 + i
+        if row_idx == n_rows:
+            array[row_idx - 1][0] += " ..."
+            break
+        array[row_idx][0] = line
 
     # right column
     max_plans = n_rows

@@ -7,7 +7,7 @@ from cicada import agent
 from cicada.utils import data, models
 
 INIT_NEW_FILES = False
-N_GAMES_PER_ROUND = 320
+N_GAMES_PER_ROUND = 350
 N_ROUNDS = 3
 N_PROCESSES = 5
 NOISE_SD = 0.05
@@ -44,6 +44,7 @@ def simulate_one_game(game_num):
         "OPP_POSSESSION",
         "ACTIVE_POS_SCORE",
         "KICK_WITH_NO_ATTEMPT_EVENT",
+        "KICK_RELEASE",
     ]
     filtered_log = data.filter_log(agent_obj.state.log, type=log_types_to_keep)
     data.add_to_log_file(filtered_log)

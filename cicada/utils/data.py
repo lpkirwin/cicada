@@ -119,13 +119,13 @@ class State:
         _kick_release = False
         if self.player_kicked_countdown_timer > 0:
             if self.switched_active_player:
-                if self.active_dist_to_ball < 0.05:
+                if self.active_dist_to_ball < 0.05:  # i.e. active player *last* turn
                     _kick_release = True
             if self.lost_possession:
                 _kick_release = True
         if _kick_release:
             one_time_kick = False if self.lost_possession else True
-            self.write_to_log({"type": "KICK_RELEASE"})
+            self.write_to_log({"type": "KICK_RELEASE", "one_time_kick": one_time_kick})
             self.write_log_queue_to_log(
                 filters={"player": obs["active"]},
                 tags={"one_time_kick": one_time_kick},
