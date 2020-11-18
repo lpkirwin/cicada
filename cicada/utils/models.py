@@ -169,7 +169,9 @@ def position_score_inner_function(log):
         opp_pos_steps = df.step[df.type == "OPP_POSSESSION"]
         for step in opp_pos_steps:
             mask = (df.step < step) & (df.step >= (step - 10))
-            df.loc[mask, "reward"] = -0.01
+            half = df.loc[mask, "posx"] > 0.0  # 1.0 if in right half
+            df.loc[mask, "reward"] = -0.01 * (2.0 - half)
+            # ^ losing ball 2x as bad in own half
 
         df = df[df.type == "ACTIVE_POS_SCORE"]
 
@@ -217,8 +219,22 @@ lgb_model_specs = {
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
+            "opp_dist_to_active_now": "eval_data.opp_dist_to_active_now",
+            "opp_dist_now": "eval_data.opp_dist_now",
+            "angle_diff": "eval_data.angle_diff",
+            "angle_to_sticky": "eval_data.angle_to_sticky",
+            "active_vel": "eval_data.active_vel",
+            "player_vel": "eval_data.player_vel",
             # "timestep": "eval_data.timestep",
             # "kick_countdown": "eval_data.kick_countdown",
+        },
+        "monotone_constraints": {
+            "pos_score_dopp": 1,
+            "pos_score_kopp": -1,
+            "small_cone_angle": 1,
+            "opp_dist_to_line": -1,
+            "opp_dist_to_active": 1,
+            "angle_diff": 1,
         },
         "class": lgb.LGBMClassifier,
         "grid": {
@@ -242,8 +258,23 @@ lgb_model_specs = {
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
+            "opp_dist_to_active_now": "eval_data.opp_dist_to_active_now",
+            "opp_dist_now": "eval_data.opp_dist_now",
+            "angle_diff": "eval_data.angle_diff",
+            "angle_to_sticky": "eval_data.angle_to_sticky",
+            "active_vel": "eval_data.active_vel",
+            "player_vel": "eval_data.player_vel",
             # "timestep": "eval_data.timestep",
             # "kick_countdown": "eval_data.kick_countdown",
+        },
+        "monotone_constraints": {
+            "pos_score_dopp": 1,
+            "pos_score_kopp": -1,
+            "small_cone_angle": 1,
+            "forward_cone_angle": 1,
+            "opp_dist_to_line": -1,
+            "opp_dist_to_active": 1,
+            "angle_diff": 1,
         },
         "class": lgb.LGBMClassifier,
         "grid": {
@@ -264,12 +295,25 @@ lgb_model_specs = {
             "pos_score_kopp": "pos_score_data.kopp",
             "close_opp_dir_change": "eval_data.close_opp_dir_change",
             "small_cone_angle": "eval_data.small_cone_angle",
+            "opp_dist_to_active": "eval_data.opp_dist_to_active",
+            "opp_dist_to_active_now": "eval_data.opp_dist_to_active_now",
             "angle_diff": "eval_data.angle_diff",
+            "angle_to_sticky": "eval_data.angle_to_sticky",
             # "timestep": "eval_data.timestep",
+        },
+        "monotone_constraints": {
+            "pos_score_dopp": 1,
+            "pos_score_kopp": -1,
+            "small_cone_angle": 1,
+            "forward_cone_angle": 1,
+            "opp_dist_to_line": -1,
+            "opp_dist_to_active": 1,
+            "opp_dist_to_active_now": 1,
+            "angle_diff": 1,
         },
         "class": lgb.LGBMClassifier,
         "grid": {
-            "n_estimators": list(range(50, 551, 100)),
+            "n_estimators": list(range(400, 601, 50)),
             "num_leaves": [30],
         },
         "scoring": "neg_log_loss",
@@ -283,6 +327,7 @@ lgb_model_specs = {
             "distance_to_net": "eval_data.distance_to_net",
             "distance_to_goalie": "eval_data.dist_to_goalie",
         },
+        "monotone_constraints": {},
         "class": lgb.LGBMClassifier,
         "grid": {
             "n_estimators": list(range(10, 301, 30)),
@@ -299,8 +344,14 @@ def fit_lgb_model(model_spec):
     print("loading data using", ms["filename"])
     df = ms["dataset"]()
     print(df.describe().T)
+    monotone_constraints = [
+        ms["monotone_constraints"].get(col, 0) for col in ms["features"].values()
+    ]
     grid_search = GridSearchCV(
-        estimator=ms["class"](),
+        estimator=ms["class"](
+            monotone_constraints=monotone_constraints,
+            monotone_constraints_method="advanced",
+        ),
         param_grid=ms["grid"],
         scoring=ms["scoring"],
         verbose=1,
@@ -323,6 +374,16 @@ def fit_lgb_model(model_spec):
             percentiles=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]
         )
     )
+    model = grid_search.best_estimator_.booster_
+    feature_importances = [
+        (feature, importance)
+        for feature, importance in zip(
+            model.feature_name(), model.feature_importance(importance_type="gain")
+        )
+    ]
+    print("feature importance (by gain):")
+    for feature, importance in sorted(feature_importances, key=lambda row: -row[1]):
+        print(f"    {feature}: {importance}")
     filepath = os.path.join(FILEPATH, "models", ms["filename"])
     print("saving to", filepath)
     grid_search.best_estimator_.booster_.save_model(filepath)
@@ -337,12 +398,9 @@ class PlaceholderModel:
 
 
 def load_lgb_models(quiet=True):
-
     global lgb_models
     lgb_models = dict()
-
     for name, spec in lgb_model_specs.items():
-
         filepath = os.path.join(FILEPATH, "models", spec["filename"])
         if os.path.isfile(filepath):
             model = lgb.Booster(model_file=filepath)
@@ -352,7 +410,6 @@ def load_lgb_models(quiet=True):
             if not quiet:
                 print("model not found, using placeholder instead:", name)
             model = PlaceholderModel(spec["default_prediction"])
-
         lgb_models[name] = model
 
 
@@ -362,15 +419,50 @@ load_lgb_models()
 def make_predict_function(name):
     model_spec = lgb_model_specs[name]
     feature_names = ", ".join(model_spec["features"].keys())
-    function_string = f"def _predict_func({feature_names}): return lgb_models['{name}'].predict([[{feature_names}]])[0]"
+    func_name = f"{name}_pred_func"
+    function_string = f"def {func_name}({feature_names}): return lgb_models['{name}'].predict([[{feature_names}]])[0]"  # noqa
     exec(function_string)
-    return locals()["_predict_func"]
+    return locals()[func_name]
 
 
 short_pass_success = make_predict_function("short_pass_success")
 long_pass_success = make_predict_function("long_pass_success")
 handle_success = make_predict_function("handle_success")
 shot_success = make_predict_function("shot_success")
+
+
+# def position_score(
+#     posx,
+#     posy,
+#     dnet,
+#     view,
+#     dopp,
+#     kopp,
+# ):
+#     return max(
+#         min(
+#             577.3380580493983
+#             + -57.09085363242917 * posx
+#             + 4.494786219604599 * posx * (posx > -0.5)
+#             + 77.34934924382932 * posx * (posx > 0.0)
+#             + 7.435744601258071 * posx * (posx > 0.5)
+#             + -1200.4658961053774 * np.log10(posx + 2.0)
+#             + -18.710388899739424 * abs(posy)
+#             + 177.0812985861264 * posy ** 2
+#             + -92.22917414014044 * dnet
+#             + -108.86680690345823 * dnet ** 2
+#             + 19.46836067164382 * view
+#             + -7.190153901812629 * view ** 2
+#             + 30.302377797759796 * dopp
+#             + -2.7866233487597025 * dopp * (dopp < 0.05)
+#             + 7.1888202992286665 * dopp * (dopp < 0.1)
+#             + -145.30362887863663 * dopp ** 2
+#             + -0.004299136217084201 * kopp
+#             + -3.3115904744855658 * np.log10(kopp),
+#             50.0,
+#         ),
+#         0,
+#     )
 
 
 def position_score(
@@ -383,24 +475,23 @@ def position_score(
 ):
     return max(
         min(
-            468.74842421261667
-            + -90.41513287612594 * posx
-            + 4.095688444021861 * posx * (posx > -0.5)
-            + 70.42702891705054 * posx * (posx > 0.0)
-            + 12.642795700464502 * posx * (posx > 0.5)
-            + -890.6776542323154 * np.log10(posx + 2.0)
-            + -14.342713413697245 * abs(posy)
-            + 148.7364449664164 * posy ** 2
-            + -96.22550776273538 * dnet
-            + -87.97648632100884 * dnet ** 2
-            + 17.15915753520119 * view
-            + -6.994788902368123 * view ** 2
-            + 13.657952325903146 * dopp
-            + -2.515510877798804 * dopp * (dopp < 0.05)
-            + 6.136153757388059 * dopp * (dopp < 0.1)
-            + -105.32057391317849 * dopp ** 2
-            + -0.008149365889387297 * kopp
-            + -3.7405569397024063 * np.log10(kopp),
+            17.588732316517465
+            + 94.6620184760818 * (posx > 0.0)
+            + 11.5649617288289 * posx * (posx <= 0.0)
+            + 3.44668680585443 * posx * (posx <= 0.0) * (posx > -0.5)
+            + -18.419489705803 * abs(posy)
+            + -31.203874896358 * posx * (posx <= 0.0) * abs(posy)
+            + -52.569027410634 * dnet * (posx > 0.0)
+            + -15.652794525001 * dnet * (posx > 0.0) * (dnet > 0.5)
+            + -3.3187575073219 * dnet * (posx > 0.0) * abs(posy)
+            + 19.3707303729916 * view
+            + -8.2205953919885 * view ** 2
+            + -17.749319074819 * dopp
+            + -10.513668973353 * dopp * (dopp < 0.05)
+            + -4.8346634391866 * np.log10(kopp)
+            + -31.242031964177 * np.log10(kopp) * (posx > 0.0)
+            + -0.8101616754952 * np.log10(kopp) * posx * (posx <= 0.0)
+            + 20.2132563626776 * np.log10(kopp) * dnet * (posx > 0.0),
             50.0,
         ),
         0,
@@ -409,16 +500,18 @@ def position_score(
 
 if __name__ == "__main__":
 
-    # test prediction functions
-    for name, spec in lgb_model_specs.items():
-        print(name)
-        features = spec["features"].keys()
-        func = make_predict_function(name)
-        pred = func(**{k: 1.0 for k in features})
-        print(pred)
+    # # test prediction functions
+    # for name, spec in lgb_model_specs.items():
+    #     print(name)
+    #     features = spec["features"].keys()
+    #     func = make_predict_function(name)
+    #     pred = func(**{k: 1.0 for k in features})
+    #     print(pred)
 
-    print("tests passed")
+    # print("tests passed")
 
     print("training models on existing data")
     for name, spec in lgb_model_specs.items():
+        if "hand" not in name:
+            continue
         fit_lgb_model(spec)

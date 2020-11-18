@@ -114,7 +114,7 @@ def pass_error(team_pos, active_idx, action):
     pass_pos = active_pos + pass_vec
     pass_dist = dist_2d(team_pos, pass_pos)
     pass_angle = angle_diff(angle(pass_pos - active_pos), angle(team_pos - active_pos))
-    pass_error = (pass_dist * 100.0) ** 0.7 + pass_angle * 0.7
+    pass_error = (pass_dist * 100.0) ** 0.7 + pass_angle * 0.66
     pass_error[active_idx] = 99_999.0
     return pass_error
 

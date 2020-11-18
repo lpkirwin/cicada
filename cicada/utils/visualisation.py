@@ -34,13 +34,14 @@ def print_diagnostics(state, log_step):
     array[9][0] = f"kick player: {eot_rec['kick_player']}"
     array[10][0] = f"will receive ball at: {eot_rec['will_receive_ball_at']}"
     array[11][0] = f"can receive ball at: {eot_rec['can_receive_ball_at']}"
-    array[12][0] = f"will collide with opp at: {eot_rec['will_collide_with_opp_at']}"
-    array[13][0] = f"elapsed time: {round(eot_rec['elapsed_time'], 6)}"
+    array[12][0] = f"opp will get ball at: {eot_rec['opp_will_get_ball_at']}"
+    array[13][0] = f"will collide with opp at: {eot_rec['will_collide_with_opp_at']}"
+    array[14][0] = f"elapsed time: {round(eot_rec['elapsed_time'], 6)}"
 
     shot_eval = data.filter_log_step(log_step, type="SHOT_EVALUATION")
     if len(shot_eval):
-        array[14][0] = f"shot view of net: {round(shot_eval[0]['view_of_net'], 4)}"
-        array[15][0] = f"shot dist to net: {round(shot_eval[0]['distance_to_net'], 4)}"
+        array[15][0] = f"shot view of net: {round(shot_eval[0]['view_of_net'], 4)}"
+        array[16][0] = f"shot dist to net: {round(shot_eval[0]['distance_to_net'], 4)}"
 
     # right column
     max_plans = n_rows

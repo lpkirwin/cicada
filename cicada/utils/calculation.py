@@ -47,7 +47,7 @@ def get_distance_to_net(pos):
 
 
 def get_min_opp_distance(state, pos, timestep=0):
-    return min(min(nav.dist_2d(pos, state.opp_pred[:, timestep])), 0.1)
+    return min(min(nav.dist_2d(pos, state.opp_pred[:, timestep])), 0.2)
 
 
 def get_opp_kernel_density(state, pos, timestep=0):

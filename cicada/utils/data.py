@@ -53,6 +53,7 @@ class State:
         self.last_touched_player = None
         self.left_has_ball = False
         self.active_idx = None
+        self.active_dist_to_ball = None
         self.player_kicked = -1
         self.player_kicked_countdown_timer = 0
         self.follow_through_pos = nav.invalid
@@ -64,8 +65,9 @@ class State:
         record["queued_at"] = self.step
         self.log_queue.append(record)
 
-    def write_log_queue_to_log(self, max_age=10, min_age=1, filters=None):
+    def write_log_queue_to_log(self, max_age=10, min_age=1, filters=None, tags=None):
         filters = filters or dict()
+        tags = tags or dict()
         sorted_queue = sorted(self.log_queue, key=lambda r: r["queued_at"])
         rec_to_write = None
         for rec in sorted_queue:
@@ -81,6 +83,8 @@ class State:
             if keep:
                 rec_to_write = rec
         if rec_to_write is not None:
+            for key, value in tags.items():
+                rec_to_write[key] = value
             self.write_to_log(rec_to_write)
         else:
             self.write_to_log({"type": "KICK_WITH_NO_ATTEMPT_EVENT"})
@@ -109,18 +113,23 @@ class State:
             if not self.player_kicked_countdown_timer > 0:
                 self.write_to_log({"type": "LOST_POSSESSION"})
 
-        if (obs["active"] != self.active_idx) or (  # TODO: leads to false positives
-            (obs["ball_owned_team"] != 0) and self.left_has_ball
-        ):
-            if self.player_kicked_countdown_timer > 0:
-                self.write_to_log({"type": "KICK_RELEASE"})
-                self.write_log_queue_to_log(filters={"player": obs["active"]})
-                # ^ may have evaluation data for passes to multiple players,
-                # but we only want to keep records for the player we actually
-                # end up attempting the pass to (it's possible that we pass
-                # to a player that we don't have an 'attempt' event to, in
-                # which case we won't record the pass at all in our training
-                # data)
+        # bunch of logic around tracking whether we've just kicked the ball
+        self.switched_active_player = obs["active"] != self.active_idx
+        self.lost_possession = (obs["ball_owned_team"] != 0) and self.left_has_ball
+        _kick_release = False
+        if self.player_kicked_countdown_timer > 0:
+            if self.switched_active_player:
+                if self.active_dist_to_ball < 0.05:
+                    _kick_release = True
+            if self.lost_possession:
+                _kick_release = True
+        if _kick_release:
+            one_time_kick = False if self.lost_possession else True
+            self.write_to_log({"type": "KICK_RELEASE"})
+            self.write_log_queue_to_log(
+                filters={"player": obs["active"]},
+                tags={"one_time_kick": one_time_kick},
+            )
 
         if obs["ball_owned_team"] >= 0:
             current_touching_player = (obs["ball_owned_team"], obs["ball_owned_player"])
@@ -160,6 +169,7 @@ class State:
         self.active_deg = nav.angle(self.active_dir)
         self.active_vel = np.linalg.norm(self.active_dir)
         self.active_has_ball = obs["ball_owned_player"] == obs["active"]
+        self.active_dist_to_ball = nav.dist_1d(self.active_pos, self.ball_pos[:2])
 
         self.left_has_ball = obs["ball_owned_team"] == 0
         self.right_has_ball = obs["ball_owned_team"] == 1
@@ -278,7 +288,7 @@ class State:
         except ValueError:
             self.will_receive_ball_at = np.nan
 
-        # can active player receive ball within n steps moving at x per step, and 
+        # can active player receive ball within n steps moving at x per step, and
         # I check that the below is below a reasonable height
         self.can_receive_ball = np.array([False] * (self.n_step_pred + 1))
         for t in range(1, self.n_step_pred + 1):
@@ -325,6 +335,7 @@ class State:
                 "active_pred": self.team_pred[self.active_idx],
                 "will_receive_ball_at": self.will_receive_ball_at,
                 "can_receive_ball_at": self.can_receive_ball_at,
+                "opp_will_get_ball_at": self.opp_will_get_ball_at,
                 "will_collide_with_opp_at": self.will_collide_with_opp_at,
                 "active_view_of_net": self.active_view_of_net,
                 "active_intercepts": self.active_intercepts,

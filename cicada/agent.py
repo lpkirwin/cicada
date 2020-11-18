@@ -50,8 +50,19 @@ class Agent:
         potential_plans.append(plans.GoalieKick())
         potential_plans.append(plans.Kickoff())
         potential_plans.append(plans.CornerKick())
+        potential_plans.append(plans.FreeKick())
 
-        if state.active_has_ball or (state.will_receive_ball_at < 3):
+        if (not state.right_has_ball) and (
+            state.active_has_ball
+            or (state.will_receive_ball_at <= 3)
+            or (
+                (state.will_receive_ball_at <= 6)
+                and (
+                    (state.will_receive_ball_at < state.opp_will_get_ball_at)
+                    or np.isnan(state.opp_will_get_ball_at)
+                )
+            )
+        ):
 
             extra_timestep = state.will_receive_ball_at
 
@@ -92,8 +103,8 @@ class Agent:
                         error_diff=error_diff,
                     )
                 )
-                
-            for action, vector in nav.action_to_vector_map.items():
+
+            for action, _ in nav.action_to_vector_map.items():
                 potential_plans.append(
                     plans.MoveWithBall(
                         action,
