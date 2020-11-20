@@ -7,6 +7,7 @@ import lightgbm as lgb
 from lightgbm.sklearn import LGBMClassifier
 import numpy as np
 import pandas as pd
+
 # from sklearn.model_selection import GridSearchCV
 from tqdm import tqdm
 
@@ -97,6 +98,7 @@ def short_pass_inner_function(log, n_steps=60):
             "NEW_POSSESSION",
             "OPP_POSSESSION",
             "KICK_RELEASE",
+            "GOAL_SCORED",
         ),
     )
     df = data.parse_log_to_df(filtered_log)
@@ -106,7 +108,11 @@ def short_pass_inner_function(log, n_steps=60):
         df["target"] = (
             (df.type == "SHORT_PASS_ATTEMPT")
             # & ((df.type.shift(-1) == "NEW_POSSESSION"))
-            & (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
+            & (
+                (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
+                | (df.type.shift(-1) == "GOAL_SCORED")
+                | ((df.type.shift(-1) == "OPP_POSSESSION") & (df.player.shift(-1) == 0))
+            )
             & (df.step.shift(-1) - df.step <= n_steps)
         ).astype(int)
         df = df[df.type == "SHORT_PASS_ATTEMPT"]
@@ -123,6 +129,7 @@ def long_pass_inner_function(log, n_steps=60):
             "NEW_POSSESSION",
             "OPP_POSSESSION",
             "KICK_RELEASE",
+            "GOAL_SCORED",
         ),
     )
     df = data.parse_log_to_df(filtered_log)
@@ -132,7 +139,11 @@ def long_pass_inner_function(log, n_steps=60):
         df["target"] = (
             (df.type == "LONG_PASS_ATTEMPT")
             # & (df.type.shift(-1) == "NEW_POSSESSION")
-            & (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
+            & (
+                (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
+                | (df.type.shift(-1) == "GOAL_SCORED")
+                | ((df.type.shift(-1) == "OPP_POSSESSION") & (df.player.shift(-1) == 0))
+            )
             & (df.step.shift(-1) - df.step <= n_steps)
         ).astype(int)
         df = df[df.type == "LONG_PASS_ATTEMPT"]
@@ -503,7 +514,7 @@ if __name__ == "__main__":
 
     # test prediction functions
     for name, spec in lgb_model_specs.items():
-        print(name)
+        print(name, "-", end=" ")
         features = spec["features"].keys()
         func = make_predict_function(name)
         pred = func(**{k: 1.0 for k in features})
