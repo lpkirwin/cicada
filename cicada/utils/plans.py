@@ -598,6 +598,10 @@ class Shoot(Plan):
                 distance_to_goalie=np.nan,
             )
             self.value *= prb_success ** config.RISK_AVERSION
+            # override if you're really right in front of the net
+            if pos[0] > 0.8:
+                if abs(pos[1]) < 0.1:
+                    self.value = 100.0
 
         self.eval_data = {
             "pos": list(pos.round(4)),

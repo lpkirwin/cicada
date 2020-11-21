@@ -7,8 +7,8 @@ from cicada import agent
 from cicada.utils import data, models
 
 INIT_NEW_FILES = False
-N_GAMES_PER_ROUND = 350
-N_ROUNDS = 3
+N_GAMES_PER_ROUND = 200
+N_ROUNDS = 1
 N_PROCESSES = 5
 NOISE_SD = 0.05
 
