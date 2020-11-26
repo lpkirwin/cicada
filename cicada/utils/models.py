@@ -64,6 +64,11 @@ def make_dataset(
         print("truncating dataset longer than", max_rows, "rows")
         new_df = new_df.tail(max_rows)
 
+    for col in new_df:
+        if new_df[col].isna().all():
+            print("dropping column", col, "because all values are nan")
+            new_df = new_df.drop(columns=[col])
+
     new_df.to_pickle(df_path)
 
     return new_df
@@ -85,6 +90,8 @@ def shot_inner_function(log, n_steps=30):
             & (df.step.shift(-1) - df.step <= n_steps)
         ).astype(int)
         df = df[df.type == "SHOT_ATTEMPT"]
+        if "eval_data.dist_to_goalie" in df.columns:
+            df = df[df["eval_data.dist_to_goalie"].isna()]
 
     return df
 
@@ -104,6 +111,9 @@ def short_pass_inner_function(log, n_steps=60):
     df = data.parse_log_to_df(filtered_log)
 
     if len(df):
+
+        if "player" not in df.columns:
+            df["player"] = -1
 
         df["target"] = (
             (df.type == "SHORT_PASS_ATTEMPT")
@@ -136,6 +146,9 @@ def long_pass_inner_function(log, n_steps=60):
 
     if len(df):
 
+        if "player" not in df.columns:
+            df["player"] = -1
+
         df["target"] = (
             (df.type == "LONG_PASS_ATTEMPT")
             # & (df.type.shift(-1) == "NEW_POSSESSION")
@@ -155,21 +168,49 @@ def handle_inner_function(log, n_steps=10):
 
     filtered_log = data.filter_log(
         log,
-        type=("MOVE_WITH_BALL_ATTEMPT", "LOST_POSSESSION", "OPP_POSSESSION"),
+        type=(
+            "MOVE_WITH_BALL_ATTEMPT",
+            "LOST_POSSESSION",
+            "NEW_POSSESSION",
+            "OPP_POSSESSION",
+            "SHOT_ATTEMPT",
+        ),
     )
     df = data.parse_log_to_df(filtered_log)
 
     if len(df):
 
-        df["target"] = 1
+        # df["target"] = 1
 
-        lost_poss_steps = df.step[df.type == "LOST_POSSESSION"]
-        for step in lost_poss_steps:
+        # lost_poss_steps = df.step[df.type == "LOST_POSSESSION"]
+        # for step in lost_poss_steps:
 
-            mask = (df.step < step) & (df.step >= (step - n_steps))
-            df.loc[mask, "target"] = 0  # failed if lost possession
+        #     mask = (df.step < step) & (df.step >= (step - n_steps))
+        #     df.loc[mask, "target"] = 0  # failed if lost possession
 
-        df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"]
+        # df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"]
+
+        attempt_df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"].copy()
+        other_event_df = df[df.type != "MOVE_WITH_BALL_ATTEMPT"].copy()
+        bad_events = ("LOST_POSSESSION", "OPP_POSSESSION")
+
+        if len(attempt_df):
+
+            targets = list()
+            for row in attempt_df.itertuples():
+                mask = (other_event_df.step > row.step) & (
+                    other_event_df.step <= row.step + 15  # TODO: tune this
+                )
+                next_events = other_event_df[mask]
+                if len(next_events):
+                    _target = 0 if next_events.type.iat[0] in bad_events else 1
+                else:
+                    _target = 1
+                targets.append(_target)
+
+            attempt_df["target"] = targets
+
+        df = attempt_df
 
     return df
 
@@ -194,9 +235,10 @@ def position_score_inner_function(log):
         opp_pos_steps = df.step[df.type == "OPP_POSSESSION"]
         for step in opp_pos_steps:
             mask = (df.step < step) & (df.step >= (step - 10))
-            half = df.loc[mask, "posx"] > 0.0  # 1.0 if in right half
-            df.loc[mask, "reward"] = -0.01 * (2.0 - half)
-            # ^ losing ball 2x as bad in own half
+            # half = df.loc[mask, "posx"] > 0.0  # 1.0 if in right half
+            # df.loc[mask, "reward"] = -0.01 * (2.0 - half)
+            # # ^ losing ball 2x as bad in own half
+            df.loc[mask, "reward"] = -0.025
 
         df = df[df.type == "ACTIVE_POS_SCORE"]
 
@@ -234,7 +276,7 @@ lgb_model_specs = {
     "short_pass_success": {
         "filename": "short_pass_model.txt",
         "dataset": make_short_pass_dataset,
-        "validation_size": 10_000,
+        "validation_size": 20_000,
         "features": {
             "pass_error_diff": "eval_data.pass_error_diff",
             "pos_score_posx": "pos_score_data.posx",
@@ -259,15 +301,14 @@ lgb_model_specs = {
             "small_cone_angle": 1,
             "opp_dist_to_line": -1,
             "opp_dist_to_active": 1,
-            "angle_diff": 1,
+            "angle_diff": -1,
         },
-        "class": lgb.LGBMClassifier,
         "default_prediction": 0.8,
     },
     "long_pass_success": {
         "filename": "long_pass_model.txt",
         "dataset": make_long_pass_dataset,
-        "validation_size": 10_000,
+        "validation_size": 20_000,
         "features": {
             "pass_error_diff": "eval_data.pass_error_diff",
             "pos_score_posx": "pos_score_data.posx",
@@ -294,15 +335,14 @@ lgb_model_specs = {
             "forward_cone_angle": 1,
             "opp_dist_to_line": -1,
             "opp_dist_to_active": 1,
-            "angle_diff": 1,
+            "angle_diff": -1,
         },
-        "class": lgb.LGBMClassifier,
         "default_prediction": 0.8,
     },
     "handle_success": {
         "filename": "handle_model.txt",
         "dataset": make_handle_dataset,
-        "validation_size": 50_000,
+        "validation_size": 80_000,
         "features": {
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
@@ -317,16 +357,15 @@ lgb_model_specs = {
             "angle_to_sticky": "eval_data.angle_to_sticky",
         },
         "monotone_constraints": {
+            "pos_score_view": 1,
             "pos_score_dopp": 1,
             "pos_score_kopp": -1,
+            "close_opp_dir_change": -1,
             "small_cone_angle": 1,
-            "forward_cone_angle": 1,
-            "opp_dist_to_line": -1,
             "opp_dist_to_active": 1,
             "opp_dist_to_active_now": 1,
-            "angle_diff": 1,
+            "angle_diff": -1,
         },
-        "class": lgb.LGBMClassifier,
         "default_prediction": 0.8,
     },
     "shot_success": {
@@ -336,10 +375,9 @@ lgb_model_specs = {
         "features": {
             "view_of_net": "eval_data.view_of_net",
             "distance_to_net": "eval_data.distance_to_net",
-            "distance_to_goalie": "eval_data.dist_to_goalie",
+            # "distance_to_goalie": "eval_data.dist_to_goalie",
         },
         "monotone_constraints": {"view_of_net": 1},
-        "class": lgb.LGBMClassifier,
         "default_prediction": 0.1,
     },
 }
@@ -353,6 +391,9 @@ def fit_lgb_model(model_spec, early_stopping_rounds=10):
     for col in ms["features"].values():
         df[col] = df[col].astype("float32")
     print(df.describe().T)
+    n_targets_with_null = df["target"].isna().sum()
+    print("dropping", n_targets_with_null, "rows with null in target")
+    df = df[df["target"].notna()]
     monotone_constraints = [
         ms["monotone_constraints"].get(col, 0) for col in ms["features"].keys()
     ]
@@ -360,6 +401,7 @@ def fit_lgb_model(model_spec, early_stopping_rounds=10):
     model = LGBMClassifier(
         n_estimators=2_000,
         monotone_constraints=monotone_constraints,
+        monotone_constraints_method="intermediate",
     )
     X = df[ms["features"].values()]
     y = df["target"]
@@ -477,6 +519,42 @@ shot_success = make_predict_function("shot_success")
 #     )
 
 
+# def position_score(
+#     posx,
+#     posy,
+#     dnet,
+#     view,
+#     dopp,
+#     kopp,
+# ):
+#     score = max(
+#         min(
+#             27.033363853453597
+#             + 91.2062898009044 * (posx > 0.0)
+#             + 14.7459003723615 * posx * (posx <= 0.0)
+#             + 0.48000504548925 * posx * (posx <= 0.0) * (posx > -0.5)
+#             + -32.882071541661 * abs(posy)
+#             + -57.879566823427 * posx * (posx <= 0.0) * abs(posy)
+#             + -49.474428174293 * dnet * (posx > 0.0)
+#             + -17.235557573448 * dnet * (posx > 0.0) * (dnet > 0.5)
+#             + 9.37350976967388 * dnet * (posx > 0.0) * abs(posy)
+#             + 20.1114525828284 * view
+#             + -9.6772164321119 * view ** 2
+#             + -26.106691576535 * dopp
+#             + -15.302308518265 * dopp * (dopp < 0.05)
+#             + -8.3786174318280 * np.log10(kopp)
+#             + -31.006196668178 * np.log10(kopp) * (posx > 0.0)
+#             + -1.6013157284963 * np.log10(kopp) * posx * (posx <= 0.0)
+#             + 19.9789663173478 * np.log10(kopp) * dnet * (posx > 0.0),
+#             50.0,
+#         ),
+#         0,
+#     )
+#     return (
+#         config.DILUTE_POSITION_SCORE * 20.0 + (1 - config.DILUTE_POSITION_SCORE) * score
+#     )
+
+
 def position_score(
     posx,
     posy,
@@ -487,23 +565,16 @@ def position_score(
 ):
     return max(
         min(
-            28.810435016096825
-            + 81.2302905360624 * (posx > 0.0)
-            + 15.2798937592741 * posx * (posx <= 0.0)
-            + -0.2422979064365 * posx * (posx <= 0.0) * (posx > -0.5)
-            + -35.471377701271 * abs(posy)
-            + -59.809437390798 * posx * (posx <= 0.0) * abs(posy)
-            + -48.189135340025 * dnet * (posx > 0.0)
-            + -15.269622343532 * dnet * (posx > 0.0) * (dnet > 0.5)
-            + 13.5998793904324 * dnet * (posx > 0.0) * abs(posy)
-            + 16.2166642874524 * view
-            + -8.3731003242932 * view ** 2
-            + -20.179044646170 * dopp
-            + -13.530266517617 * dopp * (dopp < 0.05)
-            + -7.4012791554908 * np.log10(kopp)
-            + -26.983228957547 * np.log10(kopp) * (posx > 0.0)
-            + -1.6580687482873 * np.log10(kopp) * posx * (posx <= 0.0)
-            + 19.5124470479438 * np.log10(kopp) * dnet * (posx > 0.0),
+            119.36566583641387
+            + -58.535106426191 * dnet
+            + -79.509583935351 * abs(posy)
+            + 63.9320132514581 * dnet * abs(posy)
+            + 23.1909360076611 * view
+            + -10.576991861285 * view ** 2
+            + -26.782515423702 * dopp
+            + -15.402582688847 * dopp * (dopp < 0.08)
+            + -36.389335867462 * np.log10(kopp)
+            + 15.3596388979615 * np.log10(kopp) * dnet,
             50.0,
         ),
         0,
@@ -524,6 +595,7 @@ if __name__ == "__main__":
 
     print("training models on existing data")
     for name, spec in lgb_model_specs.items():
-        # if "pass" not in name:
-        #     continue
+        if "handle" not in name:
+            print("skipping", name)
+            continue
         fit_lgb_model(spec)
