@@ -15,11 +15,34 @@ Linux
 
 ## Todo
 
-[ ] Try making pos_score for pass based on timestep + 5
+- [ ] Try making pos_score for pass based on timestep + 5
   - May have to start training from scratch :(
-[x] Manually increasing value of dopp and kopp in position score
+- [x] Manually increasing value of dopp and kopp in position score
   - Tried, didn't really work :(
-[x] Increasing negative reward for losing possession
+- [x] Increasing negative reward for losing possession
+- [ ] Try game weight of 1.0
+- [ ] Different levels of passing bonus
+- [ ] Improve pass_score
+- [x] Last minute breakaway pass
+- [x] Shorten timesteps for passes
+- [ ] Is negative effect of opp_poss in pos_score too strong?
+
+## Submission notes
+
+cicada_202011251854 = unknown
+cicada_202011252100 = unknown
+cicada_202011252325 = second submission to kaggle, fixed shooting, also implemented multi-step kicks
+cicada_202011260004 = v3 position score
+cicada_202011261101 = shortened kick timestep, now 3
+cicada_202011261101 = implemented breakaway decision point
+
+## Tournaments
+
+cicada_202011260004    1.561111    0.538889
+cicada_202011252325    1.655556    0.544444
+cicada_202011252100    1.544444    0.461111
+cicada_202011251854    1.344444    0.455556
+
 
 ## Notes
 
