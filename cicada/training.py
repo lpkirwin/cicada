@@ -10,7 +10,7 @@ INIT_NEW_FILES = False
 N_GAMES_PER_ROUND = 200
 N_ROUNDS = 1
 N_PROCESSES = 5
-NOISE_SD = 0.05
+NOISE_SD = 0.01
 
 
 def simulate_one_game(game_num):
@@ -25,8 +25,6 @@ def simulate_one_game(game_num):
         configuration={
             "save_video": False,
             "scenario_name": "11_vs_11_kaggle",
-            # "scenario_name": "academy_run_to_score_with_keeper",
-            # "episodeSteps": 200,
         },
     )
     env.reset()
