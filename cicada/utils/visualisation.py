@@ -131,6 +131,7 @@ def get_traces(state, log_step):
             pass_error=round(rec["pass_error"], 4),
             pass_error_diff=round(rec["pass_error_diff"], 4),
             pos_score=round(rec["pos_score_data"]["score"], 4),
+            view_of_net=round(rec["pos_score_data"]["view"], 4),
             prb_success=round(rec["eval_data"].get("prb_success", 0.0), 4),
             shoot_value=round(rec["shoot_value"], 4),
             value=round(rec["value"], 4),
