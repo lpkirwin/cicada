@@ -42,21 +42,24 @@ class Agent:
             active_pos_score_data["type"] = "ACTIVE_POS_SCORE"
             state.write_to_log(active_pos_score_data)
 
+        breakaway_decision_point = False
+
         # figure out all the plans we could do
         potential_plans = list()
 
         potential_plans.append(plans.GoToBall())
         potential_plans.append(plans.ChasePlayer())
-        potential_plans.append(plans.GoalieKick())
         potential_plans.append(plans.Kickoff())
         potential_plans.append(plans.CornerKick())
         potential_plans.append(plans.FreeKick())
+        potential_plans.append(plans.FinalDefense())
+        potential_plans.append(plans.PassBack())
 
         if (not state.right_has_ball) and (
             state.active_has_ball
             or (state.will_receive_ball_at <= 3)
             or (
-                (state.will_receive_ball_at <= 6)
+                (state.will_receive_ball_at <= 7)
                 and (
                     (state.will_receive_ball_at < state.opp_will_get_ball_at)
                     or np.isnan(state.opp_will_get_ball_at)
@@ -64,13 +67,18 @@ class Agent:
             )
         ):
 
-            extra_timestep = state.will_receive_ball_at
+            if state.will_receive_ball_at > 1:
+                timestep = state.will_receive_ball_at
+            else:
+                timestep = config.KICK_TIMESTEP
 
-            potential_plans.append(plans.Breakaway())
+            potential_plans.append(plans.GoalieKick())
             potential_plans.append(plans.HighPass())
-            potential_plans.append(
-                plans.Shoot(timestep=config.SHOOT_TIMESTEP + extra_timestep)
-            )
+            potential_plans.append(plans.Shoot(timestep=timestep))
+
+            breakaway = plans.Breakaway()
+            breakaway_decision_point = breakaway.is_decision_point
+            potential_plans.append(breakaway)
 
             players_to_pass_to = dict()  # player: action, error, error_diff
             for action in nav.action_to_vector_map.keys():
@@ -89,7 +97,7 @@ class Agent:
                     plans.ShortPass(
                         player,
                         action,
-                        timestep=config.PASS_TIMESTEP + extra_timestep,
+                        timestep=timestep,
                         error=error,
                         error_diff=error_diff,
                     )
@@ -98,18 +106,16 @@ class Agent:
                     plans.LongPass(
                         player,
                         action,
-                        timestep=config.PASS_TIMESTEP + extra_timestep,
+                        timestep=timestep,
                         error=error,
                         error_diff=error_diff,
                     )
                 )
 
+            move_timestep = config.MOVE_WITH_BALL_TIMESTEP + state.will_receive_ball_at
             for action, _ in nav.action_to_vector_map.items():
                 potential_plans.append(
-                    plans.MoveWithBall(
-                        action,
-                        timestep=config.MOVE_WITH_BALL_TIMESTEP + extra_timestep,
-                    )
+                    plans.MoveWithBall(action, timestep=move_timestep)
                 )
 
         # boost follow-through plans
@@ -124,8 +130,25 @@ class Agent:
                         plan.follow_through = True
                         plan.timestep = max(0, plan.timestep - time_since_kick)
                         plan.evaluate()  # reevaluate with new timestep
-                        plan.value += 100
+                        plan.value += 100 * (plan.value > 0)
                         plan.name += "_FT"
+
+        if breakaway_decision_point:
+            print(f"breakaway decision point at step {state.step}")
+            for plan in potential_plans:
+                # if isinstance(plan, (plans.ShortPass, plans.LongPass)):
+                if isinstance(plan, plans.LongPass):
+                    player_pos = state.team_pos[plan.player]
+                    if player_pos[0] > state.active_pos[0] - 0.17:  # not too far back
+                        if plan.action_direction in (
+                            Action.BottomRight,
+                            Action.Bottom,
+                            Action.Top,
+                            Action.TopRight,
+                        ):
+                            plan.value += 75 * (plan.value > 0)
+                            plan.value += plan.pos_score_data.get("view", 0.0) * 5.0
+                            plan.name += "_BR"
 
         # randomise values
         for plan in potential_plans:
@@ -147,6 +170,9 @@ class Agent:
             state.player_kicked = state.active_idx
             state.player_kicked_countdown_timer = config.KICK_COUNTDOWN_TIMER_START
             state.follow_through_plan = type(plan)
+            if state.kick_hold_length == 0:
+                state.kick_hold_length = plan.kick_hold_length
+            state.kick_hold_length -= 1
             if not state.left_has_ball:
                 if not np.isnan(state.will_receive_ball_at):
                     state.write_to_log(
@@ -159,6 +185,10 @@ class Agent:
         for plan in potential_plans:
             plan.end_of_turn_update()
 
+        if action == state.action:
+            state.action_repeat_count += 1
+        else:
+            state.action_repeat_count = 0
         state.action = action
         state.elapsed_time = time.time() - self.start_time
         state.end_of_turn_update()
