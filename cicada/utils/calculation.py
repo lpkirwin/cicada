@@ -65,9 +65,10 @@ def position_offside(state, pos, timestep=0):
     except IndexError:
         return 0.0
     ball_x = state.ball_pred[timestep, 0]
-    if pos[0] > opp_second_last_x:
-        if ball_x < opp_second_last_x:
-            return 1.0
+    if pos[0] > 0.0:
+        if pos[0] > opp_second_last_x:
+            if ball_x < opp_second_last_x:
+                return 1.0
     return 0.0
 
 
