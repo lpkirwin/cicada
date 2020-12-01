@@ -108,9 +108,9 @@ def get_action_direction_with_dir(pos_a, pos_b, dir_a):
     return deg_to_action_map[snap_to_45(deg)]
 
 
-def pass_error(team_pos, active_idx, action):
+def pass_error(team_pos, active_idx, action, kick_hold_length):
     active_pos = team_pos[active_idx]
-    pass_vec = action_to_vector_map[action] * 0.15
+    pass_vec = action_to_vector_map[action] * 0.15 * kick_hold_length
     pass_pos = active_pos + pass_vec
     pass_dist = dist_2d(team_pos, pass_pos)
     pass_angle = angle_diff(angle(pass_pos - active_pos), angle(team_pos - active_pos))
@@ -163,8 +163,8 @@ def pass_error(team_pos, active_idx, action):
 #     return total_rating
 
 
-def who_will_receive_pass(team_pos, active_idx, action):
-    errors = pass_error(team_pos, active_idx, action)
+def who_will_receive_pass(team_pos, active_idx, action, kick_hold_length):
+    errors = pass_error(team_pos, active_idx, action, kick_hold_length)
     predicted_player = np.argmin(errors)
     lowest_error, second_lowest_error = sorted(errors)[:2]
     error_diff = abs(lowest_error - second_lowest_error)
@@ -187,6 +187,8 @@ def min_opp_angle(
     ref_offset=-0.02,
     timestep=0,
 ):
+    if (pos_a == pos_b).all():
+        return 0.0
 
     target_vec = normalise_1d(pos_b - pos_a)
     target_angle = angle(target_vec)

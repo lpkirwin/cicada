@@ -93,6 +93,10 @@ def shot_inner_function(log, n_steps=30):
         if "eval_data.dist_to_goalie" in df.columns:
             df = df[df["eval_data.dist_to_goalie"].isna()]
 
+        if "eval_data.pos" in df.columns:
+            df["posx"] = df["eval_data.pos"].str[0]
+            df["posy"] = df["eval_data.pos"].str[1]
+
     return df
 
 
@@ -180,37 +184,37 @@ def handle_inner_function(log, n_steps=10):
 
     if len(df):
 
-        # df["target"] = 1
+        df["target"] = 1
 
-        # lost_poss_steps = df.step[df.type == "LOST_POSSESSION"]
-        # for step in lost_poss_steps:
+        bad_steps = df.step[df.type.isin(("LOST_POSSESSION", "OPP_POSSESSION"))]
+        for step in bad_steps:
 
-        #     mask = (df.step < step) & (df.step >= (step - n_steps))
-        #     df.loc[mask, "target"] = 0  # failed if lost possession
+            mask = (df.step < step) & (df.step >= (step - n_steps))
+            df.loc[mask, "target"] = 0  # failed if lost possession
 
-        # df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"]
+        df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"]
 
-        attempt_df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"].copy()
-        other_event_df = df[df.type != "MOVE_WITH_BALL_ATTEMPT"].copy()
-        bad_events = ("LOST_POSSESSION", "OPP_POSSESSION")
+        # attempt_df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"].copy()
+        # other_event_df = df[df.type != "MOVE_WITH_BALL_ATTEMPT"].copy()
+        # bad_events = ("LOST_POSSESSION", "OPP_POSSESSION")
 
-        if len(attempt_df):
+        # if len(attempt_df):
 
-            targets = list()
-            for row in attempt_df.itertuples():
-                mask = (other_event_df.step > row.step) & (
-                    other_event_df.step <= row.step + 15  # TODO: tune this
-                )
-                next_events = other_event_df[mask]
-                if len(next_events):
-                    _target = 0 if next_events.type.iat[0] in bad_events else 1
-                else:
-                    _target = 1
-                targets.append(_target)
+        #     targets = list()
+        #     for row in attempt_df.itertuples():
+        #         mask = (other_event_df.step > row.step) & (
+        #             other_event_df.step <= row.step + 15  # TODO: tune this
+        #         )
+        #         next_events = other_event_df[mask]
+        #         if len(next_events):
+        #             _target = 0 if next_events.type.iat[0] in bad_events else 1
+        #         else:
+        #             _target = 1
+        #         targets.append(_target)
 
-            attempt_df["target"] = targets
+        #     attempt_df["target"] = targets
 
-        df = attempt_df
+        # df = attempt_df
 
     return df
 
@@ -276,14 +280,18 @@ lgb_model_specs = {
     "short_pass_success": {
         "filename": "short_pass_model.txt",
         "dataset": make_short_pass_dataset,
-        "validation_size": 20_000,
+        "validation_size": 100_000,
         "features": {
             "pass_error_diff": "eval_data.pass_error_diff",
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
+            "pos_score_view": "pos_score_data.view",
             "pos_score_dopp": "pos_score_data.dopp",
             "pos_score_kopp": "pos_score_data.kopp",
             "small_cone_angle": "eval_data.small_cone_angle",
+            "tiny_cone_angle": "eval_data.tiny_cone_angle",
+            "micro_cone_angle": "eval_data.micro_cone_angle",
+            "reverse_tiny_cone_angle": "eval_data.reverse_tiny_cone_angle",
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
@@ -301,6 +309,7 @@ lgb_model_specs = {
             "small_cone_angle": 1,
             "opp_dist_to_line": -1,
             "opp_dist_to_active": 1,
+            "opp_dist_now": 1,
             "angle_diff": -1,
         },
         "default_prediction": 0.8,
@@ -308,15 +317,19 @@ lgb_model_specs = {
     "long_pass_success": {
         "filename": "long_pass_model.txt",
         "dataset": make_long_pass_dataset,
-        "validation_size": 20_000,
+        "validation_size": 100_000,
         "features": {
             "pass_error_diff": "eval_data.pass_error_diff",
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
+            "pos_score_view": "pos_score_data.view",
             "pos_score_dopp": "pos_score_data.dopp",
             "pos_score_kopp": "pos_score_data.kopp",
             "small_cone_angle": "eval_data.small_cone_angle",
             "forward_cone_angle": "eval_data.forward_cone_angle",
+            "tiny_cone_angle": "eval_data.tiny_cone_angle",
+            # "micro_cone_angle": "eval_data.micro_cone_angle",
+            # "reverse_tiny_cone_angle": "eval_data.reverse_tiny_cone_angle",
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
@@ -342,17 +355,20 @@ lgb_model_specs = {
     "handle_success": {
         "filename": "handle_model.txt",
         "dataset": make_handle_dataset,
-        "validation_size": 80_000,
+        "validation_size": 1_000_000,
         "features": {
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
             "pos_score_view": "pos_score_data.view",
-            "pos_score_dopp": "pos_score_data.dopp",
-            "pos_score_kopp": "pos_score_data.kopp",
+            # "pos_score_dopp": "pos_score_data.dopp",
+            # "pos_score_kopp": "pos_score_data.kopp",
             "close_opp_dir_change": "eval_data.close_opp_dir_change",
             "small_cone_angle": "eval_data.small_cone_angle",
+            "micro_cone_angle": "eval_data.micro_cone_angle",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
             "opp_dist_to_active_now": "eval_data.opp_dist_to_active_now",
+            "active_vel": "eval_data.active_vel",
+            "relative_distance": "eval_data.relative_distance",
             "angle_diff": "eval_data.angle_diff",
             "angle_to_sticky": "eval_data.angle_to_sticky",
         },
@@ -371,10 +387,13 @@ lgb_model_specs = {
     "shot_success": {
         "filename": "shot_model.txt",
         "dataset": make_shot_dataset,
-        "validation_size": 5_000,
+        "validation_size": 10_000,
         "features": {
+            "posx": "posx",
+            "posy": "posy",
             "view_of_net": "eval_data.view_of_net",
             "distance_to_net": "eval_data.distance_to_net",
+            "shooter_kopp": "eval_data.shooter_kopp",
             # "distance_to_goalie": "eval_data.dist_to_goalie",
         },
         "monotone_constraints": {"view_of_net": 1},
@@ -399,9 +418,11 @@ def fit_lgb_model(model_spec, early_stopping_rounds=10):
     ]
     print("monotone constraints:", monotone_constraints)
     model = LGBMClassifier(
-        n_estimators=2_000,
+        n_estimators=5_000,
+        num_leaves=11,
+        learning_rate=0.01,
         monotone_constraints=monotone_constraints,
-        monotone_constraints_method="intermediate",
+        monotone_constraints_method="advanced",
     )
     X = df[ms["features"].values()]
     y = df["target"]
@@ -519,6 +540,40 @@ shot_success = make_predict_function("shot_success")
 #     )
 
 
+# from commit: "things are going well"
+# def position_score(
+#     posx,
+#     posy,
+#     dnet,
+#     view,
+#     dopp,
+#     kopp,
+# ):
+#     return max(
+#         min(
+#             17.588732316517465
+#             + 94.6620184760818 * (posx > 0.0)
+#             + 11.5649617288289 * posx * (posx <= 0.0)
+#             + 3.44668680585443 * posx * (posx <= 0.0) * (posx > -0.5)
+#             + -18.419489705803 * abs(posy)
+#             + -31.203874896358 * posx * (posx <= 0.0) * abs(posy)
+#             + -52.569027410634 * dnet * (posx > 0.0)
+#             + -15.652794525001 * dnet * (posx > 0.0) * (dnet > 0.5)
+#             + -3.3187575073219 * dnet * (posx > 0.0) * abs(posy)
+#             + 19.3707303729916 * view
+#             + -8.2205953919885 * view ** 2
+#             + -17.749319074819 * dopp
+#             + -10.513668973353 * dopp * (dopp < 0.05)
+#             + -4.8346634391866 * np.log10(kopp)
+#             + -31.242031964177 * np.log10(kopp) * (posx > 0.0)
+#             + -0.8101616754952 * np.log10(kopp) * posx * (posx <= 0.0)
+#             + 20.2132563626776 * np.log10(kopp) * dnet * (posx > 0.0),
+#             50.0,
+#         ),
+#         0,
+#     )
+
+# # v2
 # def position_score(
 #     posx,
 #     posy,
@@ -555,6 +610,32 @@ shot_success = make_predict_function("shot_success")
 #     )
 
 
+# def position_score(
+#     posx,
+#     posy,
+#     dnet,
+#     view,
+#     dopp,
+#     kopp,
+# ):
+#     return max(
+#         min(
+#             121.94880682209653
+#             + -61.608515048290 * dnet
+#             + -81.518340032473 * abs(posy)
+#             + 60.9271074346992 * dnet * abs(posy)
+#             + 33.9997212993858 * view
+#             + -13.608070057762 * view ** 2
+#             + -35.633077886163 * dopp
+#             + -22.602523505199 * dopp * (dopp < 0.08)
+#             + -41.291513584673 * np.log10(kopp)
+#             + 17.8302227342944 * np.log10(kopp) * dnet,
+#             50.0,
+#         ),
+#         0,
+#     )
+
+
 def position_score(
     posx,
     posy,
@@ -565,16 +646,13 @@ def position_score(
 ):
     return max(
         min(
-            119.36566583641387
-            + -58.535106426191 * dnet
-            + -79.509583935351 * abs(posy)
-            + 63.9320132514581 * dnet * abs(posy)
-            + 23.1909360076611 * view
-            + -10.576991861285 * view ** 2
-            + -26.782515423702 * dopp
-            + -15.402582688847 * dopp * (dopp < 0.08)
-            + -36.389335867462 * np.log10(kopp)
-            + 15.3596388979615 * np.log10(kopp) * dnet,
+            41.88600209739781
+            + -26.87241792314 * dnet
+            + -70.30815593524 * abs(posy)
+            + 50.377999345915 * dnet * abs(posy)
+            + 48.783552591921 * view
+            + -61.53807858830 * view ** 2
+            + 13.110810164865 * view ** 3,
             50.0,
         ),
         0,
@@ -583,19 +661,19 @@ def position_score(
 
 if __name__ == "__main__":
 
-    # test prediction functions
-    for name, spec in lgb_model_specs.items():
-        print(name, "-", end=" ")
-        features = spec["features"].keys()
-        func = make_predict_function(name)
-        pred = func(**{k: 1.0 for k in features})
-        print(pred)
+    # # test prediction functions
+    # for name, spec in lgb_model_specs.items():
+    #     print(name, "-", end=" ")
+    #     features = spec["features"].keys()
+    #     func = make_predict_function(name)
+    #     pred = func(**{k: 1.0 for k in features})
+    #     print(pred)
 
-    print("tests passed ✅")
+    # print("tests passed ✅")
 
     print("training models on existing data")
     for name, spec in lgb_model_specs.items():
-        if "handle" not in name:
-            print("skipping", name)
-            continue
+        # if "long" not in name:
+        #     print("skipping", name)
+        #     continue
         fit_lgb_model(spec)

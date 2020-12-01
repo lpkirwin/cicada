@@ -7,10 +7,10 @@ from cicada import agent
 from cicada.utils import data, models
 
 INIT_NEW_FILES = False
-N_GAMES_PER_ROUND = 200
+N_GAMES_PER_ROUND = 20
 N_ROUNDS = 1
 N_PROCESSES = 5
-NOISE_SD = 0.01
+NOISE_SD = 0.001
 
 
 def simulate_one_game(game_num):
@@ -25,6 +25,9 @@ def simulate_one_game(game_num):
         configuration={
             "save_video": False,
             "scenario_name": "11_vs_11_kaggle",
+            "agentTimeout": 60,
+            "actTimeout": 60,
+            "runTimeout": 1200,
         },
     )
     env.reset()
@@ -52,18 +55,17 @@ def simulate_one_game(game_num):
     score = env.state[0]["observation"]["players_raw"][0]["score"]
     data.add_to_score_file(score)
 
-    to_print = f"game_num: {str(game_num):>4}, score: {str(score):>8}, "
+    to_print = f"game_num: {str(game_num):>4}, score: {str(score):>8}, steps: {str(len(env.steps)):>4}, "
     rec_count_strings = list()
-    for rec_type in [
-        "SHOT_ATTEMPT",
-        "MOVE_WITH_BALL_ATTEMPT",
-        "SHORT_PASS_ATTEMPT",
-        "LONG_PASS_ATTEMPT",
-        "LOST_POSSESSION",
-        "KICK_WITH_NO_ATTEMPT_EVENT",
+    for rec_type, short_name in [
+        ("SHOT_ATTEMPT", "shot"),
+        ("MOVE_WITH_BALL_ATTEMPT", "move"),
+        ("SHORT_PASS_ATTEMPT", "short"),
+        ("LONG_PASS_ATTEMPT", "long"),
+        ("ACTIVE_POS_SCORE", "poss"),
     ]:
         rec_count_strings.append(
-            f"{rec_type}: {str(record_type_counts.get(rec_type, 0)):>4}"
+            f"{short_name}: {str(record_type_counts.get(rec_type, 0)):>4}"
         )
     to_print += ", ".join(rec_count_strings)
     print(to_print)

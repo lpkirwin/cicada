@@ -34,8 +34,8 @@ def print_diagnostics(state, log_step):
     array[7][0] = f"active velocity: {round(state.active_vel, 4)}"
     array[8][0] = f"kick countdown: {eot_rec['kick_countdown']}"
     array[9][0] = f"kick player: {eot_rec['kick_player']}"
-    array[10][0] = f"will receive ball at: {eot_rec['will_receive_ball_at']}"
-    array[11][0] = f"can receive ball at: {eot_rec['can_receive_ball_at']}"
+    array[10][0] = f"kick hold so far: {eot_rec['kick_hold_length_so_far']}"
+    array[11][0] = f"will receive ball at: {eot_rec['will_receive_ball_at']}"
     array[12][0] = f"opp will get ball at: {eot_rec['opp_will_get_ball_at']}"
     array[13][0] = f"will collide with opp at: {eot_rec['will_collide_with_opp_at']}"
     array[14][0] = f"elapsed time: {round(eot_rec['elapsed_time'], 6)}"
@@ -61,7 +61,13 @@ def print_diagnostics(state, log_step):
             + "{:.2f}".format(rec["value"]).rjust(7)
             + "{:.2f}".format(rec["pos_score_data"].get("score", 0.0)).rjust(7)
             + "{:.2%}".format(rec["eval_data"].get("prb_success", 0.0)).rjust(8)
-            + str(rec["pos"].round(2)).rjust(15)
+            # + str(rec["pos"].round(2)).rjust(15)
+            + " p:"
+            + str(rec["player"]).rjust(2)
+            + " k:"
+            + str(rec["kick_hold_length"]).rjust(2)
+            + " t:"
+            + str(rec.get("timestep", "")).rjust(2)
         )
         array[n_plans][1] = text
         n_plans += 1
@@ -119,7 +125,7 @@ def get_traces(state, log_step):
     active_intercepts += [np.nan] * (6 - len(active_intercepts))
     active_intercepts = active_intercepts[:6]
 
-    n_targets_to_show = 14
+    n_targets_to_show = 20
     target_pos = np.ones(shape=(n_targets_to_show, 2)) * -99
     target_tooltip = Tooltip()
     for i, rec in enumerate(data.filter_log_step(log_step, type="PLAN")):
@@ -127,7 +133,9 @@ def get_traces(state, log_step):
         target_tooltip.append(
             plan=rec["plan"],
             action_direction=rec["action_direction"],
+            player=rec.get("player"),
             timestep=rec.get("timestep", None),
+            kick_hold_length=rec.get("kick_hold_length", None),
             pass_error=round(rec["pass_error"], 4),
             pass_error_diff=round(rec["pass_error_diff"], 4),
             pos_score=round(rec["pos_score_data"]["score"], 4),

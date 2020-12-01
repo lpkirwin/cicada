@@ -60,7 +60,7 @@ class State:
         self.player_kicked_countdown_timer = 0
         self.follow_through_pos = nav.invalid
         self.follow_through_plan = None
-        self.kick_hold_length = 1
+        self.kick_hold_length_so_far = 0
         self.step = -1
         self.start_of_turn_update(obs)
 
@@ -252,16 +252,19 @@ class State:
         self.opp_will_get_ball = np.array([False] * (self.n_step_pred + 1))
         if self.right_has_ball:
             self.opp_will_get_ball[0] = True
-        for t in range(1, self.n_step_pred + 1):
+        for t in range(self.n_step_pred, 0, -1):  # reversing to tell which opp gets it
             for o in range(self.opp_n_players):
                 opp_pos = self.opp_pred[o, t]
                 ball_pos = self.ball_pred[t, :2]
                 if nav.dist_1d(opp_pos, ball_pos) < 0.02:
-                    self.opp_will_get_ball[t] = True
+                    if self.ball_pred[t, 2] < 1.5:  # how tall are players?
+                        self.opp_will_get_ball[t] = True
+                        self.opp_that_will_get_ball = o
         try:
             self.opp_will_get_ball_at = min(np.where(self.opp_will_get_ball)[0])
         except ValueError:
             self.opp_will_get_ball_at = np.nan
+            self.opp_that_will_get_ball = None
 
         # will active player collide with opponent within n steps
         self.will_collide_with_opp = np.array([False] * (self.n_step_pred + 1))
@@ -315,7 +318,7 @@ class State:
         for action in self.sticky_actions:
             if action in nav.action_to_vector_map:
                 self.sticky_action_pass_error = nav.pass_error(
-                    self.team_pos, self.active_idx, action
+                    self.team_pos, self.active_idx, action, kick_hold_length=1
                 )
 
     def end_of_turn_update(self):
@@ -334,6 +337,7 @@ class State:
                     if self.player_kicked_countdown_timer > 0
                     else "n/a"
                 ),
+                "kick_hold_length_so_far": self.kick_hold_length_so_far,
                 "ball_pred": self.ball_pred,
                 "active_pred": self.team_pred[self.active_idx],
                 "will_receive_ball_at": self.will_receive_ball_at,

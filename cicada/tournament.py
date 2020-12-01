@@ -11,8 +11,11 @@ import numpy as np
 import pandas as pd
 from kaggle_environments import make
 
-N_ROUNDS = 180
-N_PROCESSES = 2
+from cicada.utils import data
+
+N_ROUNDS = 120
+N_PROCESSES = 4
+GREENLIST_TO_SAVE = ["cicada_202011272336", "cicada_202011272338"]
 
 
 def find_agent_names():
@@ -65,6 +68,11 @@ def simulate_one_game(agent_names):
     env.run([action_0, action_1])
     score = env.state[0]["observation"]["players_raw"][0]["score"]
 
+    if agent_names[0] in GREENLIST_TO_SAVE:
+        save_score_and_log(agent_0, score)
+    if agent_names[1] in GREENLIST_TO_SAVE:
+        save_score_and_log(agent_1, score[::-1])
+
     return score
 
 
@@ -86,6 +94,27 @@ def report_results(tournament_scores):
     print(win_df.describe())
     print()
     print(win_df.mean())
+
+
+def save_score_and_log(agent_obj, score):
+
+    log_types_to_keep = [
+        "SHOT_ATTEMPT",
+        "GOAL_SCORED",
+        "OPP_GOAL_SCORED",
+        "MOVE_WITH_BALL_ATTEMPT",
+        "SHORT_PASS_ATTEMPT",
+        "LONG_PASS_ATTEMPT",
+        "LOST_POSSESSION",
+        "NEW_POSSESSION",
+        "OPP_POSSESSION",
+        "ACTIVE_POS_SCORE",
+        "KICK_WITH_NO_ATTEMPT_EVENT",
+        "KICK_RELEASE",
+    ]
+    filtered_log = data.filter_log(agent_obj.state.log, type=log_types_to_keep)
+    data.add_to_log_file(filtered_log)
+    data.add_to_score_file(score)
 
 
 if __name__ == "__main__":

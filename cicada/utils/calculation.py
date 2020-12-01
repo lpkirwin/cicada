@@ -80,3 +80,13 @@ def opp_density_to_line(state, pos_a, pos_b, timestep=0):
         ]
     ).clip(min=0.01)
     return (1 / opp_dists).sum()
+
+
+def opp_distance_to_line(state, pos_a, pos_b, timestep=0):
+    opp_dists = np.array(
+        [
+            nav.dist_from_point_to_line_segment(opp_pos, pos_a, pos_b)
+            for opp_pos in state.opp_pred[:, timestep]
+        ]
+    )
+    return opp_dists.min()
