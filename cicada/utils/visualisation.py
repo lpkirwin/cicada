@@ -3,13 +3,8 @@ import textwrap
 import plotly.graph_objects as go
 import numpy as np
 
-# import pandas as pd
-# from copy import deepcopy
-
 from . import navigation as nav
 from . import data
-
-# from ipywidgets import interact
 
 
 def print_diagnostics(state, log_step):
@@ -54,14 +49,11 @@ def print_diagnostics(state, log_step):
     max_plans = n_rows
     n_plans = 0
     for rec in data.filter_log_step(log_step, type="PLAN"):
-        # active = " (ACTIVE)" if rec["active"] else ""
-        # array[n_plans][1] = f"{rec['plan']}{active} / {rec['value']} / {rec['pos']}"
         text = (
             str(rec["plan"]).ljust(15)
             + "{:.2f}".format(rec["value"]).rjust(7)
             + "{:.2f}".format(rec["pos_score_data"].get("score", 0.0)).rjust(7)
             + "{:.2%}".format(rec["eval_data"].get("prb_success", 0.0)).rjust(8)
-            # + str(rec["pos"].round(2)).rjust(15)
             + " p:"
             + str(rec["player"]).rjust(2)
             + " k:"
@@ -357,9 +349,6 @@ def get_traces(state, log_step):
         )
     )
 
-    # for trace in traces:
-    #     trace.visible = True
-
     return traces
 
 
@@ -421,6 +410,6 @@ def make_figure_widget(n_traces=30):
     )
 
     for _ in range(n_traces):
-        fig.add_scatter(x=[0], y=[0])  # , fillcolor="rgba(0,0,0,0)")
+        fig.add_scatter(x=[0], y=[0])
 
     return fig

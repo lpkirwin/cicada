@@ -1,18 +1,12 @@
 import json
 import os
-
 from functools import partial
 
 import lightgbm as lgb
-from lightgbm.sklearn import LGBMClassifier
-import numpy as np
 import pandas as pd
-
-# from sklearn.model_selection import GridSearchCV
+from cicada.utils import config, data
+from lightgbm.sklearn import LGBMClassifier
 from tqdm import tqdm
-
-from cicada.utils import data
-from cicada.utils import config
 
 FILEPATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -121,7 +115,6 @@ def short_pass_inner_function(log, n_steps=60):
 
         df["target"] = (
             (df.type == "SHORT_PASS_ATTEMPT")
-            # & ((df.type.shift(-1) == "NEW_POSSESSION"))
             & (
                 (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
                 | (df.type.shift(-1) == "GOAL_SCORED")
@@ -155,7 +148,6 @@ def long_pass_inner_function(log, n_steps=60):
 
         df["target"] = (
             (df.type == "LONG_PASS_ATTEMPT")
-            # & (df.type.shift(-1) == "NEW_POSSESSION")
             & (
                 (df.type.shift(-1).isin(["NEW_POSSESSION", "KICK_RELEASE"]))
                 | (df.type.shift(-1) == "GOAL_SCORED")
@@ -194,28 +186,6 @@ def handle_inner_function(log, n_steps=10):
 
         df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"]
 
-        # attempt_df = df[df.type == "MOVE_WITH_BALL_ATTEMPT"].copy()
-        # other_event_df = df[df.type != "MOVE_WITH_BALL_ATTEMPT"].copy()
-        # bad_events = ("LOST_POSSESSION", "OPP_POSSESSION")
-
-        # if len(attempt_df):
-
-        #     targets = list()
-        #     for row in attempt_df.itertuples():
-        #         mask = (other_event_df.step > row.step) & (
-        #             other_event_df.step <= row.step + 15  # TODO: tune this
-        #         )
-        #         next_events = other_event_df[mask]
-        #         if len(next_events):
-        #             _target = 0 if next_events.type.iat[0] in bad_events else 1
-        #         else:
-        #             _target = 1
-        #         targets.append(_target)
-
-        #     attempt_df["target"] = targets
-
-        # df = attempt_df
-
     return df
 
 
@@ -239,9 +209,6 @@ def position_score_inner_function(log):
         opp_pos_steps = df.step[df.type == "OPP_POSSESSION"]
         for step in opp_pos_steps:
             mask = (df.step < step) & (df.step >= (step - 10))
-            # half = df.loc[mask, "posx"] > 0.0  # 1.0 if in right half
-            # df.loc[mask, "reward"] = -0.01 * (2.0 - half)
-            # # ^ losing ball 2x as bad in own half
             df.loc[mask, "reward"] = -0.025
 
         df = df[df.type == "ACTIVE_POS_SCORE"]
@@ -328,8 +295,6 @@ lgb_model_specs = {
             "small_cone_angle": "eval_data.small_cone_angle",
             "forward_cone_angle": "eval_data.forward_cone_angle",
             "tiny_cone_angle": "eval_data.tiny_cone_angle",
-            # "micro_cone_angle": "eval_data.micro_cone_angle",
-            # "reverse_tiny_cone_angle": "eval_data.reverse_tiny_cone_angle",
             "pass_distance": "eval_data.pass_distance",
             "opp_dist_to_line": "eval_data.opp_dist_to_line",
             "opp_dist_to_active": "eval_data.opp_dist_to_active",
@@ -360,8 +325,6 @@ lgb_model_specs = {
             "pos_score_posx": "pos_score_data.posx",
             "pos_score_dnet": "pos_score_data.dnet",
             "pos_score_view": "pos_score_data.view",
-            # "pos_score_dopp": "pos_score_data.dopp",
-            # "pos_score_kopp": "pos_score_data.kopp",
             "close_opp_dir_change": "eval_data.close_opp_dir_change",
             "small_cone_angle": "eval_data.small_cone_angle",
             "micro_cone_angle": "eval_data.micro_cone_angle",
@@ -394,7 +357,6 @@ lgb_model_specs = {
             "view_of_net": "eval_data.view_of_net",
             "distance_to_net": "eval_data.distance_to_net",
             "shooter_kopp": "eval_data.shooter_kopp",
-            # "distance_to_goalie": "eval_data.dist_to_goalie",
         },
         "monotone_constraints": {"view_of_net": 1},
         "default_prediction": 0.1,
@@ -506,136 +468,6 @@ handle_success = make_predict_function("handle_success")
 shot_success = make_predict_function("shot_success")
 
 
-# def position_score(
-#     posx,
-#     posy,
-#     dnet,
-#     view,
-#     dopp,
-#     kopp,
-# ):
-#     return max(
-#         min(
-#             577.3380580493983
-#             + -57.09085363242917 * posx
-#             + 4.494786219604599 * posx * (posx > -0.5)
-#             + 77.34934924382932 * posx * (posx > 0.0)
-#             + 7.435744601258071 * posx * (posx > 0.5)
-#             + -1200.4658961053774 * np.log10(posx + 2.0)
-#             + -18.710388899739424 * abs(posy)
-#             + 177.0812985861264 * posy ** 2
-#             + -92.22917414014044 * dnet
-#             + -108.86680690345823 * dnet ** 2
-#             + 19.46836067164382 * view
-#             + -7.190153901812629 * view ** 2
-#             + 30.302377797759796 * dopp
-#             + -2.7866233487597025 * dopp * (dopp < 0.05)
-#             + 7.1888202992286665 * dopp * (dopp < 0.1)
-#             + -145.30362887863663 * dopp ** 2
-#             + -0.004299136217084201 * kopp
-#             + -3.3115904744855658 * np.log10(kopp),
-#             50.0,
-#         ),
-#         0,
-#     )
-
-
-# from commit: "things are going well"
-# def position_score(
-#     posx,
-#     posy,
-#     dnet,
-#     view,
-#     dopp,
-#     kopp,
-# ):
-#     return max(
-#         min(
-#             17.588732316517465
-#             + 94.6620184760818 * (posx > 0.0)
-#             + 11.5649617288289 * posx * (posx <= 0.0)
-#             + 3.44668680585443 * posx * (posx <= 0.0) * (posx > -0.5)
-#             + -18.419489705803 * abs(posy)
-#             + -31.203874896358 * posx * (posx <= 0.0) * abs(posy)
-#             + -52.569027410634 * dnet * (posx > 0.0)
-#             + -15.652794525001 * dnet * (posx > 0.0) * (dnet > 0.5)
-#             + -3.3187575073219 * dnet * (posx > 0.0) * abs(posy)
-#             + 19.3707303729916 * view
-#             + -8.2205953919885 * view ** 2
-#             + -17.749319074819 * dopp
-#             + -10.513668973353 * dopp * (dopp < 0.05)
-#             + -4.8346634391866 * np.log10(kopp)
-#             + -31.242031964177 * np.log10(kopp) * (posx > 0.0)
-#             + -0.8101616754952 * np.log10(kopp) * posx * (posx <= 0.0)
-#             + 20.2132563626776 * np.log10(kopp) * dnet * (posx > 0.0),
-#             50.0,
-#         ),
-#         0,
-#     )
-
-# # v2
-# def position_score(
-#     posx,
-#     posy,
-#     dnet,
-#     view,
-#     dopp,
-#     kopp,
-# ):
-#     score = max(
-#         min(
-#             27.033363853453597
-#             + 91.2062898009044 * (posx > 0.0)
-#             + 14.7459003723615 * posx * (posx <= 0.0)
-#             + 0.48000504548925 * posx * (posx <= 0.0) * (posx > -0.5)
-#             + -32.882071541661 * abs(posy)
-#             + -57.879566823427 * posx * (posx <= 0.0) * abs(posy)
-#             + -49.474428174293 * dnet * (posx > 0.0)
-#             + -17.235557573448 * dnet * (posx > 0.0) * (dnet > 0.5)
-#             + 9.37350976967388 * dnet * (posx > 0.0) * abs(posy)
-#             + 20.1114525828284 * view
-#             + -9.6772164321119 * view ** 2
-#             + -26.106691576535 * dopp
-#             + -15.302308518265 * dopp * (dopp < 0.05)
-#             + -8.3786174318280 * np.log10(kopp)
-#             + -31.006196668178 * np.log10(kopp) * (posx > 0.0)
-#             + -1.6013157284963 * np.log10(kopp) * posx * (posx <= 0.0)
-#             + 19.9789663173478 * np.log10(kopp) * dnet * (posx > 0.0),
-#             50.0,
-#         ),
-#         0,
-#     )
-#     return (
-#         config.DILUTE_POSITION_SCORE * 20.0 + (1 - config.DILUTE_POSITION_SCORE) * score
-#     )
-
-
-# def position_score(
-#     posx,
-#     posy,
-#     dnet,
-#     view,
-#     dopp,
-#     kopp,
-# ):
-#     return max(
-#         min(
-#             121.94880682209653
-#             + -61.608515048290 * dnet
-#             + -81.518340032473 * abs(posy)
-#             + 60.9271074346992 * dnet * abs(posy)
-#             + 33.9997212993858 * view
-#             + -13.608070057762 * view ** 2
-#             + -35.633077886163 * dopp
-#             + -22.602523505199 * dopp * (dopp < 0.08)
-#             + -41.291513584673 * np.log10(kopp)
-#             + 17.8302227342944 * np.log10(kopp) * dnet,
-#             50.0,
-#         ),
-#         0,
-#     )
-
-
 def position_score(
     posx,
     posy,
@@ -661,19 +493,16 @@ def position_score(
 
 if __name__ == "__main__":
 
-    # # test prediction functions
-    # for name, spec in lgb_model_specs.items():
-    #     print(name, "-", end=" ")
-    #     features = spec["features"].keys()
-    #     func = make_predict_function(name)
-    #     pred = func(**{k: 1.0 for k in features})
-    #     print(pred)
+    # test prediction functions
+    for name, spec in lgb_model_specs.items():
+        print(name, "-", end=" ")
+        features = spec["features"].keys()
+        func = make_predict_function(name)
+        pred = func(**{k: 1.0 for k in features})
+        print(pred)
 
-    # print("tests passed ✅")
+    print("tests passed ✅")
 
     print("training models on existing data")
     for name, spec in lgb_model_specs.items():
-        # if "long" not in name:
-        #     print("skipping", name)
-        #     continue
         fit_lgb_model(spec)

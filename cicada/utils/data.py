@@ -188,33 +188,13 @@ class State:
             nav.dist_2d(self.ball_pos[:2], self.opp_pos)
         )
 
-        # # offside rule
-        # opp_second_last_x = sorted(self.opp_pos[:, 0])[-2]
-        # self.team_offside = (
-        #     self.team_pos[:, 0] > opp_second_last_x
-        # ) & (self.ball_pos[0] < opp_second_last_x)
-
-        # # distance between all pairs of my players
-        # x_diff = np.subtract.outer(self.team_pos[:, 0], self.team_pos[:, 0])
-        # y_diff = np.subtract.outer(self.team_pos[:, 1], self.team_pos[:, 1])
-        # self.player_distance_matrix = (x_diff ** 2 + y_diff ** 2) ** 0.5
-
         # distance between my players and opp players
         x_diff = np.subtract.outer(self.team_pos[:, 0], self.opp_pos[:, 0])
         y_diff = np.subtract.outer(self.team_pos[:, 1], self.opp_pos[:, 1])
         self.opp_distance_matrix = (x_diff ** 2 + y_diff ** 2) ** 0.5
 
-        # # distance between long pass targets and opp players
-        # x_diff = np.subtract.outer(
-        #     self.team_pos[:, 0] + config.LONG_PASS_OFFSET,
-        #     self.opp_pos[:, 0],
-        # )
-        # y_diff = np.subtract.outer(self.team_pos[:, 1], self.opp_pos[:, 1])
-        # self.opp_distance_matrix_long = (x_diff ** 2 + y_diff ** 2) ** 0.5
-
         # minimum opp distance for each player
         self.min_opp_distance = self.opp_distance_matrix.min(axis=1)
-        # self.min_opp_distance_long = self.opp_distance_matrix_long.min(axis=1)
 
         # ball predictions
         self.ball_pred = np.zeros(shape=(self.n_step_pred + 1, 3))

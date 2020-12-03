@@ -1,6 +1,3 @@
-# from datetime import time
-from os import times
-from cicada.utils.navigation import dist_1d, dist_2d
 import numpy as np
 from kaggle_environments.envs.football.helpers import Action, GameMode
 
@@ -201,15 +198,11 @@ class MoveWithBall(Plan):
         relative_distance = calc.get_min_opp_distance(
             self.state, self.pos, timestep=0
         ) - nav.dist_1d(self.state.active_pos, self.pos)
-        # if angle_diff <= 50:
-        #     self.name += "*"
 
         prb_success = models.handle_success(
             pos_score_posx=self.pos_score_data["posx"],
             pos_score_dnet=self.pos_score_data["dnet"],
             pos_score_view=self.pos_score_data["view"],
-            # pos_score_dopp=self.pos_score_data["dopp"],
-            # pos_score_kopp=self.pos_score_data["kopp"],
             close_opp_dir_change=close_opp_dir_change,
             small_cone_angle=small_cone_angle,
             micro_cone_angle=micro_cone_angle,
@@ -219,9 +212,7 @@ class MoveWithBall(Plan):
             relative_distance=relative_distance,
             angle_diff=angle_diff,
             angle_to_sticky=angle_to_sticky,
-            # timestep=self.timestep,
         )
-        # self.value *= prb_success ** config.RISK_AVERSION
         self.value *= prb_success
 
         # plan is super unattractive if we'd move outside the pitch
@@ -381,16 +372,10 @@ class ShortPass(Plan):
             one_time_kick=one_time_kick,
         )
         self.value *= prb_success ** config.RISK_AVERSION
-        # self.value *= 1.0 - (one_time_kick * 0.1)
-        # if prb_success < 0.5:
-        #     self.value = 0
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
             self.value *= 0.1
-
-        # if pass_distance > 0.25:
-        #     self.kick_hold_length = 2
 
         self.eval_data = {
             "timestep": self.timestep,
@@ -441,8 +426,6 @@ class ShortPass(Plan):
             else:
                 return Action.ReleaseDribble
         else:
-            # if self.action_direction not in self.state.sticky_actions:
-            #     return self.action_direction
             return Action.ShortPass
 
 
@@ -547,8 +530,6 @@ class LongPass(Plan):
             small_cone_angle=small_cone_angle,
             forward_cone_angle=forward_cone_angle,
             tiny_cone_angle=tiny_cone_angle,
-            # micro_cone_angle=micro_cone_angle,
-            # reverse_tiny_cone_angle=reverse_tiny_cone_angle,
             pass_distance=pass_distance,
             opp_dist_to_line=opp_dist_to_line,
             opp_dist_to_active=opp_dist_to_active,
@@ -561,16 +542,10 @@ class LongPass(Plan):
             one_time_kick=one_time_kick,
         )
         self.value *= prb_success ** config.RISK_AVERSION
-        # self.value *= 1.0 - (one_time_kick * 0.1)
-        # if prb_success < 0.5:
-        #     self.value = 0
 
         pos_offside = calc.position_offside(self.state, player_pos, self.timestep)
         if pos_offside:
             self.value *= 0.1
-
-        # if pass_distance > 0.3:
-        #     self.kick_hold_length = 3
 
         self.eval_data = {
             "timestep": self.timestep,
@@ -625,8 +600,6 @@ class LongPass(Plan):
             else:
                 return Action.ReleaseDribble
         else:
-            # if self.action_direction not in self.state.sticky_actions:
-            #     return self.action_direction
             return Action.LongPass
 
 
@@ -669,8 +642,6 @@ class HighPass(Plan):
             else:
                 return Action.ReleaseDribble
         else:
-            # if desired_act not in self.state.sticky_actions:
-            #     return desired_act
             return Action.HighPass
 
 
@@ -756,9 +727,7 @@ class Shoot(Plan):
                 posx=pos[0],
                 posy=pos[1],
                 shooter_kopp=shooter_kopp,
-                # distance_to_goalie=np.nan,
             )
-            # self.value *= prb_success ** config.RISK_AVERSION
             self.value *= prb_success
         # override if you're really right in front of the net
         if pos[0] > 0.8:
@@ -829,13 +798,17 @@ class ChasePlayer(Plan):
         return self.state.opp_pred[opp, -1]
 
     def get_action(self):
-        player_dnet_6 = nav.dist_1d(self.state.team_pred[self.state.active_idx, 6], nav.own_goal)
+        player_dnet_6 = nav.dist_1d(
+            self.state.team_pred[self.state.active_idx, 6], nav.own_goal
+        )
         opp_dnet_6 = nav.dist_1d(self.state.opp_pred[self.opp, 6], nav.own_goal)
         if player_dnet_6 > opp_dnet_6:
             if player_dnet_6 - opp_dnet_6 > 0.06:
                 subplan = Move(nav.own_goal)
                 return subplan.get_action()
-        player_dnet_3 = nav.dist_1d(self.state.team_pred[self.state.active_idx, 3], nav.own_goal)
+        player_dnet_3 = nav.dist_1d(
+            self.state.team_pred[self.state.active_idx, 3], nav.own_goal
+        )
         opp_dnet_3 = nav.dist_1d(self.state.opp_pred[self.opp, 3], nav.own_goal)
         if opp_dnet_3 < player_dnet_3:
             subplan = Move(nav.own_goal)
@@ -877,8 +850,6 @@ class GoalieKick(Plan):
                 return desired_act
             else:
                 return Action.ReleaseDribble
-        # if desired_act not in self.state.sticky_actions:
-        #     return desired_act
         return Action.HighPass
 
 
@@ -909,8 +880,6 @@ class CornerKick(Plan):
             else:
                 return Action.ReleaseDribble
         else:
-            # if desired_act not in self.state.sticky_actions:
-            #     return desired_act
             return Action.HighPass
 
 
@@ -991,47 +960,12 @@ class Breakaway(Plan):
                 return Action.ReleaseDribble
 
         if self.is_decision_point:
-
-            # first decide if we want to pass
-
-            # - for each player with posx > active_posx - 0.13
-            # - check their shot score
-            # - if it's much better than active player's shot score, then pass
-
-            # players_to_pass_to = list()
-            # for player_idx, player_pos in enumerate(self.state.team_pos):
-            #     if player_idx == self.state.active_idx:
-            #         continue
-            #     if player_pos[0] > self.state.active_pos[0] - 0.13:
-            #         players_to_pass_to.append(player_idx)
-
-            # active_shot_score =  ...MAYBE FINISHING THIS LATER
-
-            # if we don't want to pass, take a shot:
-
             desired_act = (
                 Action.TopRight if self.state.active_pos[1] > 0 else Action.BottomRight
             )
             if desired_act not in self.state.sticky_actions:
                 return desired_act
             else:
-                # # add some extra metadata from training regular shot action
-                # pos = self.state.active_pred[self.timestep]
-                # view_of_net = calc.get_view_of_net(
-                #     self.state, pos, timestep=self.timestep
-                # )
-                # distance_to_net = calc.get_distance_to_net(pos)
-                # self.state.write_to_log(
-                #     {
-                #         "type": "SHOT_ATTEMPT",
-                #         "eval_data": {
-                #             "dist_to_goalie": dist_to_goalie,
-                #             "pos": pos,
-                #             "view_of_net": view_of_net,
-                #             "distance_to_net": distance_to_net,
-                #         },
-                #     }
-                # )
                 self.state.write_to_log({"type": "BREAKAWAY_SHOT_ATTEMPT"})
                 return Action.Shot
 
@@ -1108,14 +1042,10 @@ class PassBack(Plan):
 
     def evaluate(self):
 
-        # import pdb; pdb.set_trace()
-
         self.value = 1.0
 
         if self.state.active_idx == 0:
             return None
-        # if not self.state.left_has_ball:
-        #     return None
         if self.state.player_kicked_countdown_timer > 0:
             return None
 
